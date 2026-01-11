@@ -15,6 +15,8 @@
 # prisma
 /prisma/dev.db
 /prisma/dev.db-journal
+/prisma/migrations
+
 
 # misc
 .DS_Store
@@ -40,3 +42,5 @@ next-env.d.ts
 .idea
 .vscode/*
 !.vscode/extensions.json
+
+/src/generated/prisma

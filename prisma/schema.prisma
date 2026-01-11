@@ -1,0 +1,589 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ======================
+// Enums
+// ======================
+
+enum StoryStatus {
+  Draft
+  Serializing
+  Abandoned
+  Complete
+}
+
+enum StoryVisibility {
+  private
+  public
+}
+
+enum StoryType {
+  movie
+  game
+  manga
+  novel
+  comic
+  webtoon
+  series
+  book
+  drama
+  anime
+  RPG
+  fanfiction
+}
+
+enum StoryGenre {
+  Action
+  Adventure
+  Adult
+  Bara
+  Comedy
+  Crime
+  Cult
+  Cultivation
+  Cyberpunk
+  DarkFantasy
+  Drama
+  Dystopian
+  Ecchi
+  Erotica
+  Fantasy
+  FairyTale
+  Gothic
+  Gore
+  Gourmet
+  Harem
+  HaremReverse
+  Hentai
+  Historical
+  Horror
+  Isekai
+  Josei
+  Legal
+  MartialArts
+  Mature
+  Mecha
+  Medical
+  Military
+  Mystery
+  Musical
+  Noir
+  Parody
+  Police
+  Political
+  PostApocalyptic
+  Psychological
+  Romance
+  School
+  SciFi
+  Seinen
+  Shoujo
+  Shounen
+  SliceOfLife
+  Smut
+  Space
+  Sports
+  Spy
+  Steampunk
+  Supernatural
+  Tragedy
+  Thriller
+  UrbanFantasy
+  Vampire
+  Western
+  Wuxia
+  Xianxia
+  Xianyong
+  Xuanhuan
+  Yaoi
+  Yuri
+}
+
+enum CollaborationRole {
+  Edit
+  Comment
+  View
+}
+
+enum AnalysisType {
+  auto
+  manual
+  scheduled
+}
+
+enum AnalysisScope {
+  full
+  partial
+}
+
+enum SuggestionAction {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+enum SuggestionTarget {
+  CARD
+  EVENT
+  TIMELINE
+  STORY
+}
+
+enum AIProvider {
+  OPENAI
+  GEMINI
+  ANTHROPIC
+}
+
+enum EventIntensity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum EventVisibility {
+  PUBLIC
+  PRIVATE
+  SECRET
+}
+
+enum EventRelationshipType {
+  CAUSES
+  CAUSED_BY
+  FORESHADOWS
+  RESOLVES
+  ESCALATES
+  DEESCALATES
+  PARALLEL_TO
+  CONTRADICTS
+}
+
+enum NoteRelationType {
+  REFERENCES
+  EXPANDS
+  DRAFT_OF
+  CONTRADICTS
+}
+
+// ======================
+// Models
+// ======================
+
+model User {
+  id             String          @id @default(uuid())
+  email          String          @unique
+  username       String          @unique @db.VarChar(20)
+  password       String? // null if OAuth
+  createdAt      DateTime        @default(now())
+  stories        Story[]
+  collaborations Collaboration[]
+  comments       Comment[]
+  suggestions    Suggestion[]
+
+  aiProvider AIProvider?
+  apiKey     String? // Encrypted (conceptually, for now plain text per plan)
+}
+
+model Story {
+  id               String                @id @default(uuid())
+  title            String                @db.VarChar(100)
+  abbreviation     String                @db.VarChar(10)
+  languages        String[] // ISO 639-1
+  types            StoryType[]
+  genres           StoryGenre[]
+  synopsis         String?               @db.VarChar(2000)
+  tags             String[] // e.g., ["#Action"]
+  status           StoryStatus           @default(Draft)
+  visibility       StoryVisibility       @default(private)
+  coverUrl         String? // HTTPS URL
+  ownerId          String
+  owner            User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators    Collaboration[]
+  cardTypes        CardType[]
+  attributeDefs    AttributeDefinition[]
+  eventTypes       EventType[]
+  cards            Card[]
+  events           Event[]
+  timelineConfig   TimelineConfig?
+  timeline         Timeline[]
+  analysisReports  AnalysisReport[]
+  comments         Comment[]
+  suggestions      Suggestion[]
+  notes            Note[]
+  cardRoles        CardRole[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  EventCardLink    EventCardLink[]
+  EventEventLink   EventEventLink[]
+  TimelinePath     TimelinePath[]
+  NoteNoteLink     NoteNoteLink[]
+  Tag              Tag[]
+
+  @@unique([ownerId, title])
+  @@unique([ownerId, abbreviation])
+}
+
+model Collaboration {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role       CollaborationRole @default(View)
+  accepted   Boolean           @default(false)
+  invitedAt  DateTime          @default(now())
+  acceptedAt DateTime? // optional timestamp; becomes non-null when accepted
+
+  @@unique([storyId, userId])
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  storyId   String
+  userId    String
+  message   String
+  createdAt DateTime @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Suggestion {
+  id      String @id @default(uuid())
+  storyId String
+  userId  String
+
+  targetType SuggestionTarget
+  targetId   String?
+
+  action  SuggestionAction
+  message String?
+  payload Json
+
+  accepted   Boolean   @default(false)
+  rejected   Boolean   @default(false)
+  reviewedAt DateTime?
+  createdAt  DateTime  @default(now())
+
+  story Story @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model CardType {
+  id          String                @id @default(uuid())
+  storyId     String
+  story       Story                 @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  name        String                @db.VarChar(50)
+  description String?               @db.VarChar(2000)
+  attributes  AttributeDefinition[]
+  layout      Json
+  createdAt   DateTime              @default(now())
+  cards       Card[]
+  cardRoles   CardRole[]
+
+  @@unique([storyId, name])
+}
+
+model AttributeDefinition {
+  id          String   @id @default(uuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  cardTypeId  String
+  cardType    CardType @relation(fields: [cardTypeId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(50)
+  description String?  @db.VarChar(2000)
+  attrType    String // "Text", "Number", etc.
+  config      Json? // e.g., { unit: "ft" }
+  createdAt   DateTime @default(now())
+
+  @@unique([cardTypeId, name])
+}
+
+model Card {
+  id             String          @id @default(uuid())
+  storyId        String
+  story          Story           @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  name           String          @db.VarChar(100)
+  cardTypeId     String
+  cardType       CardType        @relation(fields: [cardTypeId], references: [id])
+  description    String?         @db.VarChar(2000)
+  attributes     Json? // validated array of { name, value }
+  tags           String[] // e.g., ["#main"]
+  imageUrl       String? // HTTPS URL
+  version        Int             @default(1)
+  hidden         Boolean         @default(false)
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  eventCardLinks EventCardLink[] // Added for EventCardLink.card relation
+}
+
+model EventType {
+  id          String   @id @default(uuid())
+  storyId     String
+  story       Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  name        String   @db.VarChar(50)
+  description String?  @db.VarChar(2000)
+  createdAt   DateTime @default(now())
+  events      Event[]
+
+  @@unique([storyId, name])
+}
+
+model Event {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  title       String  @db.VarChar(100)
+  description String? @db.VarChar(2000)
+
+  eventTypeId String
+  eventType   EventType @relation(fields: [eventTypeId], references: [id])
+
+  intensity  EventIntensity  @default(MEDIUM)
+  visibility EventVisibility @default(PUBLIC)
+  outcome    String?         @db.VarChar(1000)
+
+  timelineId String?
+  timeline   Timeline? @relation(fields: [timelineId], references: [id], onDelete: SetNull)
+
+  order Int @default(0)
+
+  tags String[]
+
+  linkedCards      EventCardLink[]
+  linkedEventsFrom EventEventLink[] @relation("FromEvent")
+  linkedEventsTo   EventEventLink[] @relation("ToEvent")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storyId])
+  @@index([timelineId, order])
+}
+
+model CardRole {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  name        String  @db.VarChar(50)
+  description String? @db.VarChar(200)
+
+  cardTypeId String?
+  cardType   CardType? @relation(fields: [cardTypeId], references: [id], onDelete: Cascade)
+
+  createdAt      DateTime        @default(now())
+  EventCardLinks EventCardLink[]
+
+  @@unique([storyId, name])
+}
+
+model EventCardLink {
+  id String @id @default(uuid())
+
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  eventId String
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  cardId String
+  card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
+
+  cardType String
+
+  roleId String?
+  role   CardRole? @relation(fields: [roleId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([storyId])
+  @@index([eventId])
+  @@index([cardId])
+}
+
+model EventEventLink {
+  id String @id @default(uuid())
+
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  fromEventId String
+  fromEvent   Event  @relation("FromEvent", fields: [fromEventId], references: [id], onDelete: Cascade)
+
+  toEventId String
+  toEvent   Event  @relation("ToEvent", fields: [toEventId], references: [id], onDelete: Cascade)
+
+  relationshipType EventRelationshipType
+
+  createdAt DateTime @default(now())
+
+  @@unique([fromEventId, toEventId, relationshipType])
+  @@index([storyId])
+  @@index([fromEventId])
+  @@index([toEventId])
+}
+
+model TimelineConfig {
+  id      String @id @default(uuid())
+  storyId String @unique
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  timelineType String @default("single") // "single" or "multi"
+
+  // Level definitions
+  level1Name String @default("Book")
+
+  level2Name String? // Optional
+
+  level3Name    String? // Optional
+  level3Persist Boolean @default(false)
+
+  level4Name    String? // Optional
+  level4Persist Boolean @default(false)
+
+  level5Name    String  @default("Chapter") // Required
+  level5Persist Boolean @default(false)
+
+  confirmed Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Timeline {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  parentId String?
+  parent   Timeline?  @relation("TimelineTree", fields: [parentId], references: [id])
+  children Timeline[] @relation("TimelineTree")
+
+  position Int[]
+  name     String  @default("")
+  title    String?
+  level    Int
+
+  pathId String?
+  path   TimelinePath? @relation(fields: [pathId], references: [id])
+
+  events    Event[]
+  notes     Note? // chapter-like
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, position])
+  @@index([storyId])
+  @@index([parentId])
+  @@index([level])
+}
+
+model TimelinePath {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  name        String?
+  description String?
+
+  timelines Timeline[]
+
+  createdAt DateTime @default(now())
+
+  @@index([storyId])
+}
+
+model AnalysisReport {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  type  AnalysisType // auto, manual, scheduled
+  scope AnalysisScope // full, partial
+
+  summary   Json // required; contains critical, warnings, suggestions, score
+  findings  Json // required; list of structured findings
+  aiContext Json? // optional metadata about the analysis run
+
+  createdAt DateTime @default(now())
+
+  @@index([storyId, createdAt])
+}
+
+model Note {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  title   String   @db.VarChar(200)
+  content String // markdown
+  tags    String[]
+
+  // Chapter binding (1 note per timeline node)
+  timelineId String?   @unique
+  timeline   Timeline? @relation(fields: [timelineId], references: [id], onDelete: SetNull)
+
+  noteLinksFrom NoteNoteLink[]     @relation("NoteFrom")
+  noteLinksTo   NoteNoteLink[]     @relation("NoteTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([storyId])
+}
+
+model NoteNoteLink {
+  id String @id @default(uuid())
+
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  fromNoteId String
+  fromNote   Note   @relation("NoteFrom", fields: [fromNoteId], references: [id], onDelete: Cascade)
+
+  toNoteId String
+  toNote   Note   @relation("NoteTo", fields: [toNoteId], references: [id], onDelete: Cascade)
+
+  relationType NoteRelationType @default(REFERENCES)
+
+  createdAt DateTime @default(now())
+
+  @@unique([fromNoteId, toNoteId])
+}
+
+model Tag {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  name       String @db.VarChar(50)
+  usageCount Int    @default(0)
+
+  @@unique([storyId, name])
+  @@index([storyId])
+}
+
+model GlobalTag {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
