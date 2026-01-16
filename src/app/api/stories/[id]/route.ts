@@ -1,9 +1,8 @@
-
 import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { verifyStoryAccess, PermissionError } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 import { UpdateStorySchema } from '@/domain/schemas/story.schema';
 import { z } from 'zod';
 
@@ -25,16 +24,15 @@ export async function GET(
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    try {
-        const userId = (session.user as any).id;
-        const story = await verifyStoryAccess(storyId, userId, 'VIEW');
-        return NextResponse.json(story);
-    } catch (error) {
-        if (error instanceof PermissionError) {
-            return new NextResponse(error.message, { status: 403 });
-        }
-        return new NextResponse('Internal Error', { status: 500 });
+    const userId = (session.user as any).id;
+    const { authorized, status, error } = await checkStoryPermission(storyId, userId, CollaborationRole.View);
+
+    if (!authorized) {
+        return new NextResponse(error || 'Forbidden', { status: status || 403 });
     }
+
+    const story = await prisma.story.findUnique({ where: { id: storyId } });
+    return NextResponse.json(story);
 }
 
 export async function PATCH(
@@ -48,10 +46,14 @@ export async function PATCH(
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    try {
-        const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'EDIT');
+    const userId = (session.user as any).id;
+    const { authorized, status, error } = await checkStoryPermission(storyId, userId, CollaborationRole.Edit);
 
+    if (!authorized) {
+        return new NextResponse(error || 'Forbidden', { status: status || 403 });
+    }
+
+    try {
         const body = await req.json();
         const validatedData = UpdateStorySchema.parse(body);
 
@@ -62,9 +64,6 @@ export async function PATCH(
 
         return NextResponse.json(updatedStory);
     } catch (error) {
-        if (error instanceof PermissionError) {
-            return new NextResponse(error.message, { status: 403 });
-        }
         if (error instanceof z.ZodError) {
             return new NextResponse('Invalid request data', { status: 422 });
         }
@@ -84,19 +83,20 @@ export async function DELETE(
         return new NextResponse('Unauthorized', { status: 401 });
     }
 
-    try {
-        const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'OWNER');
+    const userId = (session.user as any).id;
+    const { authorized, status, error } = await checkStoryPermission(storyId, userId, 'Owner');
 
+    if (!authorized) {
+        return new NextResponse(error || 'Forbidden', { status: status || 403 });
+    }
+
+    try {
         await prisma.story.delete({
             where: { id: storyId },
         });
 
         return new NextResponse(null, { status: 204 });
     } catch (error) {
-        if (error instanceof PermissionError) {
-            return new NextResponse(error.message, { status: 403 });
-        }
         console.error('[STORY_DELETE]', error);
         return new NextResponse('Internal Error', { status: 500 });
     }

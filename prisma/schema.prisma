@@ -29,19 +29,20 @@ enum StoryVisibility {
   public
 }
 
-enum StoryType {
-  movie
-  game
-  manga
-  novel
-  comic
-  webtoon
-  series
-  book
-  drama
-  anime
+enum StoryMedium {
+  Story
+  Movie
+  Game
+  Manga
+  Novel
+  Comic
+  Webtoon
+  Series
+  Book
+  Drama
+  Anime
   RPG
-  fanfiction
+  Fanfiction
 }
 
 enum StoryGenre {
@@ -210,8 +211,8 @@ model Story {
   id               String                @id @default(uuid())
   title            String                @db.VarChar(100)
   abbreviation     String                @db.VarChar(10)
-  languages        String[] // ISO 639-1
-  types            StoryType[]
+  language         String // ISO 639-1
+  medium           StoryMedium           @default(Story)
   genres           StoryGenre[]
   synopsis         String?               @db.VarChar(2000)
   tags             String[] // e.g., ["#Action"]

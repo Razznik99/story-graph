@@ -11,14 +11,14 @@ export default function LoginPage() {
 
     const handleOAuthSignIn = (provider: string) => {
         setIsLoading(true);
-        signIn(provider, { callbackUrl: '/dashboard' });
+        signIn(provider, { callbackUrl: '/stories' });
     };
 
     const handleEmailSignIn = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!email) return;
         setIsLoading(true);
-        await signIn('email', { email, callbackUrl: '/dashboard' });
+        await signIn('email', { email, callbackUrl: '/stories' });
     };
 
     if (isLoading) {

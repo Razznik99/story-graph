@@ -141,11 +141,11 @@ export const accents = {
         contrast: "0 0% 100%",
         ring: "158 84% 39%",
     },
-    copper: {
-        base: "20 89% 50%", // #ea580c (approx)
-        hover: "20 89% 45%",
+    ruby: {
+        base: "348 83% 47%", // #DC143C
+        hover: "348 83% 42%",
         contrast: "0 0% 100%",
-        ring: "20 89% 50%",
+        ring: "348 83% 47%",
     },
     rose: {
         base: "343 78% 50%", // #e11d48
@@ -158,5 +158,11 @@ export const accents = {
         hover: "84 81% 39%",
         contrast: "0 0% 10%", // Darker contrast for light color
         ring: "84 81% 44%",
+    },
+    blood: {
+        base: "351 100% 29%", // #960018
+        hover: "351 100% 25%",
+        contrast: "0 0% 100%",
+        ring: "351 100% 29%",
     },
 };

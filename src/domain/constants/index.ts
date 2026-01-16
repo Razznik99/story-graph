@@ -5,13 +5,13 @@ export const MAX_STORY_SYNOPSIS_LENGTH = 2000;
 
 export const DEFAULT_PAGE_SIZE = 20;
 
-export const SUPPORTED_LANGUAGES = ['en', 'es', 'fr', 'de', 'ja', 'ko', 'zh'] as const;
+export const LANGUAGES = ['English', 'Spanish', 'French', 'German', 'Japanese', 'Korean', 'Chinese', 'Russian', 'Arabic', 'Hindi', 'Portuguese', 'Italian', 'Dutch', 'Polish', 'Vietnamese', 'Thai', 'Tamil', 'Telugu', 'Urdu', 'Bengali'] as const;
 
 // Enums / Constants for validation and UI
 export const STORY_STATUSES = ['Draft', 'Serializing', 'Abandoned', 'Complete'] as const;
 export const STORY_VISIBILITIES = ['private', 'public'] as const;
-export const STORY_TYPES = [
-    'movie', 'game', 'manga', 'novel', 'comic', 'webtoon', 'series', 'book', 'drama', 'anime', 'RPG', 'fanfiction'
+export const STORY_MEDIUM = [
+    'Story', 'Movie', 'Game', 'Manga', 'Novel', 'Comic', 'Webtoon', 'Series', 'Book', 'Drama', 'Anime', 'RPG', 'Fanfiction'
 ] as const;
 
 export const STORY_GENRES = [

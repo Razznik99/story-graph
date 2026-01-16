@@ -15,6 +15,18 @@ export const EventTypeSchema = z.object({
     createdAt: z.date(),
 });
 
+export const CreateEventTypeSchema = z.object({
+    name: z.string().min(1).max(50),
+    description: z.string().max(2000).optional(),
+    storyId: z.string().uuid(),
+});
+
+export const UpdateEventTypeSchema = z.object({
+    id: z.string().uuid(),
+    name: z.string().min(1).max(50).optional(),
+    description: z.string().max(2000).optional().nullable(),
+});
+
 export const EventSchema = z.object({
     id: z.string().uuid(),
     storyId: z.string().uuid(),

@@ -225,11 +225,11 @@
   --focus-ring: 158 84% 39%;
 }
 
-[data-accent='copper'] {
-  --accent: 20 89% 50%;
-  --accent-hover: 20 89% 45%;
+[data-accent='ruby'] {
+  --accent: 348 83% 47%;
+  --accent-hover: 348 83% 42%;
   --accent-contrast: 0 0% 100%;
-  --focus-ring: 20 89% 50%;
+  --focus-ring: 348 83% 47%;
 }
 
 [data-accent='rose'] {
@@ -244,6 +244,13 @@
   --accent-hover: 84 81% 39%;
   --accent-contrast: 0 0% 10%;
   --focus-ring: 84 81% 44%;
+}
+
+[data-accent='blood'] {
+  --accent: 351 100% 29%;
+  --accent-hover: 351 100% 25%;
+  --accent-contrast: 0 0% 100%;
+  --focus-ring: 351 100% 29%;
 }
 
 /* 

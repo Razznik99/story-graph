@@ -22,9 +22,10 @@ type Accent =
     | "sky"
     | "violet"
     | "emerald"
-    | "copper"
+    | "ruby"
     | "rose"
-    | "lime";
+    | "lime"
+    | "blood";
 
 interface ThemeContextType {
     theme: Theme;

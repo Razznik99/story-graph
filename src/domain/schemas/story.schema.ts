@@ -2,21 +2,23 @@ import { z } from 'zod';
 import {
     STORY_STATUSES,
     STORY_VISIBILITIES,
-    STORY_TYPES,
-    STORY_GENRES
+    STORY_MEDIUM,
+    STORY_GENRES,
+    LANGUAGES
 } from '../constants';
 
 export const StoryStatusSchema = z.enum(STORY_STATUSES);
 export const StoryVisibilitySchema = z.enum(STORY_VISIBILITIES);
-export const StoryTypeSchema = z.enum(STORY_TYPES);
+export const StoryMediumSchema = z.enum(STORY_MEDIUM);
 export const StoryGenreSchema = z.enum(STORY_GENRES);
+export const languages = z.enum(LANGUAGES)
 
 export const StorySchema = z.object({
     id: z.string().uuid(),
     title: z.string().min(1).max(100),
     abbreviation: z.string().min(1).max(10),
-    languages: z.array(z.string()),
-    types: z.array(StoryTypeSchema),
+    language: languages,
+    medium: StoryMediumSchema,
     genres: z.array(StoryGenreSchema),
     synopsis: z.string().max(2000).nullable(),
     tags: z.array(z.string()),
@@ -31,9 +33,12 @@ export const StorySchema = z.object({
 export const CreateStorySchema = z.object({
     title: z.string().min(1).max(100),
     abbreviation: z.string().min(1).max(10),
-    types: z.array(StoryTypeSchema).optional(),
+    language: languages.optional(),
+    medium: StoryMediumSchema.optional(),
     genres: z.array(StoryGenreSchema).optional(),
+    status: StoryStatusSchema.optional(),
     synopsis: z.string().max(2000).optional(),
+    tags: z.array(z.string()).optional(),
     visibility: StoryVisibilitySchema.optional(),
     coverUrl: z.string().url().optional().or(z.literal('')),
 });
