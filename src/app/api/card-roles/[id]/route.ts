@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UpdateCardRoleSchema } from '@/domain/schemas/card.schema';
-import { verifyStoryAccess } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -29,7 +29,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(role.storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(role.storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         if (name && name !== role.name) {
             const existing = await prisma.cardRole.findFirst({
@@ -74,7 +77,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(role.storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(role.storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         await prisma.cardRole.delete({ where: { id } });
         return new NextResponse(null, { status: 204 });

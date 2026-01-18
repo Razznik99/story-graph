@@ -26,6 +26,7 @@ export const STORY_GENRES = [
 ] as const;
 
 export const COLLABORATION_ROLES = ['Edit', 'Comment', 'View'] as const;
+export const COLLABORATION_STATUS = ['PENDING', 'ACCEPTED', 'REJECTED'] as const;
 
 export const EVENT_INTENSITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] as const;
 export const EVENT_VISIBILITIES = ['PUBLIC', 'PRIVATE', 'SECRET'] as const;

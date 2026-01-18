@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { verifyStoryAccess, PermissionError } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 import { CreateCardTypeSchema } from '@/domain/schemas/card.schema';
 
 // GET /api/card-types?storyId=...
@@ -18,11 +18,9 @@ export async function GET(req: NextRequest) {
         if (!storyId)
             return NextResponse.json({ error: 'storyId is required' }, { status: 400 });
 
-        try {
-            await verifyStoryAccess(storyId, session.user.id, 'VIEW');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(storyId, session.user.id, CollaborationRole.View);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         const cardTypes = await prisma.cardType.findMany({
@@ -50,11 +48,9 @@ export async function POST(req: NextRequest) {
         if (!storyId)
             return NextResponse.json({ error: 'storyId is required' }, { status: 400 });
 
-        try {
-            await verifyStoryAccess(storyId, session.user.id, 'EDIT');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(storyId, session.user.id, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         const parsed = CreateCardTypeSchema.safeParse(data);

@@ -3,7 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { CreateEventTypeSchema } from '@/domain/schemas/event.schema';
-import { verifyStoryAccess } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 
 export async function GET(req: NextRequest) {
     try {
@@ -20,7 +20,10 @@ export async function GET(req: NextRequest) {
 
         // Use centralized permission check
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'VIEW');
+        const permission = await checkStoryPermission(storyId, userId, CollaborationRole.View);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         const eventTypes = await prisma.eventType.findMany({
             where: { storyId },
@@ -29,9 +32,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json(eventTypes);
     } catch (error: any) {
-        if (error.code === 'P2025' || error.message === 'Permission denied') {
-            return NextResponse.json({ error: error.message || 'Access denied' }, { status: 403 });
-        }
+
         console.error('EventType GET error:', error);
         return NextResponse.json({ error: 'Failed to fetch event types' }, { status: 500 });
     }
@@ -53,7 +54,10 @@ export async function POST(req: NextRequest) {
         const { storyId, name } = parsed.data;
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         // Check name uniqueness in this story
         const existing = await prisma.eventType.findFirst({
@@ -73,9 +77,7 @@ export async function POST(req: NextRequest) {
 
         return NextResponse.json(eventType, { status: 201 });
     } catch (error: any) {
-        if (error.code === 'P2025' || error.message === 'Permission denied') {
-            return NextResponse.json({ error: error.message || 'Access denied' }, { status: 403 });
-        }
+
         console.error('EventType POST error:', error);
         return NextResponse.json({ error: 'Failed to create event type' }, { status: 500 });
     }

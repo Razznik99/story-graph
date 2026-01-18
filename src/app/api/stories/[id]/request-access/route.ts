@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { RequestAccessSchema } from '@/domain/schemas/collaboration.schema';
+import { CollaborationRequestSchema } from '@/domain/schemas/collaboration.schema';
 import { z } from 'zod';
 
 export async function POST(
@@ -17,7 +17,7 @@ export async function POST(
 
         const storyId = params.id;
         const body = await req.json();
-        const { role, message } = RequestAccessSchema.parse(body);
+        const { role, message } = CollaborationRequestSchema.parse(body);
 
         let userId = session.user.id;
         if (!userId && session.user.email) {

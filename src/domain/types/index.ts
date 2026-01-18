@@ -10,17 +10,22 @@ export type CreateStory = z.infer<typeof schemas.CreateStorySchema>;
 export type UpdateStory = z.infer<typeof schemas.UpdateStorySchema>;
 export type StoryStatus = z.infer<typeof schemas.StoryStatusSchema>;
 export type StoryVisibility = z.infer<typeof schemas.StoryVisibilitySchema>;
-export type StoryType = z.infer<typeof schemas.StoryTypeSchema>;
+export type StoryMedium = z.infer<typeof schemas.StoryMediumSchema>;
 export type StoryGenre = z.infer<typeof schemas.StoryGenreSchema>;
 
 export type Collaboration = z.infer<typeof schemas.CollaborationSchema>;
 export type CollaborationRole = z.infer<typeof schemas.CollaborationRoleSchema>;
+export type CollaborationStatus = z.infer<typeof schemas.CollaborationStatusSchema>;
+export type CollaborationInvite = z.infer<typeof schemas.CollaborationInviteSchema>;
+export type CollaborationRequest = z.infer<typeof schemas.CollaborationRequestSchema>;
+export type RequestStatus = CollaborationStatus;
 
 export type Card = z.infer<typeof schemas.CardSchema>;
 export type CreateCard = z.infer<typeof schemas.CreateCardSchema>;
 export type UpdateCard = z.infer<typeof schemas.UpdateCardSchema>;
 export type CardType = z.infer<typeof schemas.CardTypeSchema>;
 export type AttributeDefinition = z.infer<typeof schemas.AttributeDefinitionSchema>;
+export type AttributeWithValue = z.infer<typeof schemas.AttributeWithValueSchema>;
 export type CardRole = z.infer<typeof schemas.CardRoleSchema>;
 
 export type Event = z.infer<typeof schemas.EventSchema>;

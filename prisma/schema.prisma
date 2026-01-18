@@ -118,9 +118,9 @@ enum CollaborationRole {
   View
 }
 
-enum RequestStatus {
+enum CollaborationStatus {
   PENDING
-  APPROVED
+  ACCEPTED
   REJECTED
 }
 
@@ -208,6 +208,7 @@ model User {
   collaborationRequests   CollaborationRequest[]
   comments       Comment[]
   suggestions    Suggestion[]
+  collaborationInvites CollaborationInvite[]
 
   aiProvider AIProvider?
   apiKey     String? // Encrypted (conceptually, for now plain text per plan)
@@ -229,6 +230,7 @@ model Story {
   owner            User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   collaborators    Collaboration[]
   collaborationRequests   CollaborationRequest[]
+  collaborationInvites   CollaborationInvite[]
   cardTypes        CardType[]
   attributeDefs    AttributeDefinition[]
   eventTypes       EventType[]
@@ -277,12 +279,28 @@ model CollaborationRequest {
 
   role    CollaborationRole
   message String?           @db.VarChar(500)
-  status  RequestStatus     @default(PENDING)
+  status  CollaborationStatus     @default(PENDING)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([storyId, userId]) // Limit one request per user per story to avoid spam
+}
+
+model CollaborationInvite {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role    CollaborationRole
+  status  CollaborationStatus     @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, userId])
 }
 
 model Comment {

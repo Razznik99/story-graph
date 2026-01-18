@@ -203,7 +203,7 @@ export default function AccountPage() {
                         <h3 className="text-lg font-medium text-text-primary mb-4">Session</h3>
                         <button
                             onClick={() => signOut({ callbackUrl: '/' })}
-                            className="px-4 py-2 bg-surface-hover border border-border rounded-lg text-text-primary hover:bg-surface-active transition-colors"
+                            className="px-4 py-2 bg-surface border border-border rounded-lg text-text-primary hover:bg-accent transition-colors"
                         >
                             Sign Out
                         </button>

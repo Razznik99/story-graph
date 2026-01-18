@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { verifyStoryAccess, PermissionError } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 import { UpdateCardTypeSchema } from '@/domain/schemas/card.schema';
 
 // PUT /api/card-types/[id]
@@ -28,11 +28,9 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         if (!cardType)
             return NextResponse.json({ error: 'Card type not found' }, { status: 404 });
 
-        try {
-            await verifyStoryAccess(cardType.storyId, session.user.id, 'EDIT');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(cardType.storyId, session.user.id, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         const updated = await prisma.cardType.update({
@@ -64,11 +62,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         if (!cardType)
             return NextResponse.json({ error: 'Card type not found' }, { status: 404 });
 
-        try {
-            await verifyStoryAccess(cardType.storyId, session.user.id, 'EDIT');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(cardType.storyId, session.user.id, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         await prisma.cardType.delete({ where: { id } });

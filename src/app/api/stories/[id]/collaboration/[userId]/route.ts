@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
-import { verifyStoryAccess, PermissionError } from '@/lib/permissions';
+import { checkStoryPermission } from '@/lib/permissions';
 import { CollaborationRoleSchema } from '@/domain/schemas/collaboration.schema';
 import { z } from 'zod';
 
@@ -22,7 +22,10 @@ export async function PATCH(
 
     try {
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'OWNER');
+        const permission = await checkStoryPermission(storyId, userId, 'Owner');
+        if (!permission.authorized) {
+            return new NextResponse(permission.error || 'Forbidden', { status: permission.status || 403 });
+        }
 
         const body = await req.json();
         const { role } = z.object({ role: CollaborationRoleSchema }).parse(body);
@@ -42,9 +45,6 @@ export async function PATCH(
 
         return NextResponse.json(updatedCollaboration);
     } catch (error) {
-        if (error instanceof PermissionError) {
-            return new NextResponse(error.message, { status: 403 });
-        }
         if (error instanceof z.ZodError) {
             return new NextResponse('Invalid request data', { status: 422 });
         }
@@ -70,7 +70,10 @@ export async function DELETE(
 
     try {
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'OWNER');
+        const permission = await checkStoryPermission(storyId, userId, 'Owner');
+        if (!permission.authorized) {
+            return new NextResponse(permission.error || 'Forbidden', { status: permission.status || 403 });
+        }
 
         await prisma.collaboration.delete({
             where: {
@@ -83,9 +86,6 @@ export async function DELETE(
 
         return new NextResponse(null, { status: 204 });
     } catch (error) {
-        if (error instanceof PermissionError) {
-            return new NextResponse(error.message, { status: 403 });
-        }
         if ((error as any).code === 'P2025') {
             return new NextResponse('Collaborator not found', { status: 404 });
         }

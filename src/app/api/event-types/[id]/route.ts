@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { UpdateEventTypeSchema } from '@/domain/schemas/event.schema';
-import { verifyStoryAccess } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     try {
@@ -29,7 +29,10 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(eventType.storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(eventType.storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         // Check name uniqueness if name is changing
         if (name && name !== eventType.name) {
@@ -51,9 +54,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
 
         return NextResponse.json(updated);
     } catch (error: any) {
-        if (error.code === 'P2025' || error.message === 'Permission denied') {
-            return NextResponse.json({ error: error.message || 'Access denied' }, { status: 403 });
-        }
+
         console.error('EventType PUT error:', error);
         return NextResponse.json({ error: 'Failed to update event type' }, { status: 500 });
     }
@@ -74,7 +75,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(eventType.storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(eventType.storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         // Check if in use? 
         // Prisma restrictions usually prevent this if foreign keys exist. 
@@ -83,9 +87,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         await prisma.eventType.delete({ where: { id } });
         return new NextResponse(null, { status: 204 });
     } catch (error: any) {
-        if (error.code === 'P2025' || error.message === 'Permission denied') {
-            return NextResponse.json({ error: error.message || 'Access denied' }, { status: 403 });
-        }
+
         // Foreign key constraint failed
         if (error.code === 'P2003') {
             return NextResponse.json({ error: "Cannot delete Event Type because it is being used by events." }, { status: 400 });

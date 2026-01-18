@@ -50,6 +50,11 @@ export const AttributeDefinitionSchema = z.object({
     createdAt: z.date(),
 });
 
+export const AttributeWithValueSchema = z.object({
+    name: z.string(),
+    value: z.any(),
+});
+
 export const CreateAttributeSchema = z.object({
     name: z.string().min(1).max(50),
     description: z.string().max(2000).optional(),
@@ -72,7 +77,7 @@ export const CardSchema = z.object({
     name: z.string().min(1).max(100),
     cardTypeId: z.string().uuid(),
     description: z.string().max(2000).nullable(),
-    attributes: z.any().nullable(), // Json
+    attributes: z.array(AttributeWithValueSchema).nullable(),
     tags: z.array(z.string()),
     imageUrl: z.string().url().nullable(),
     version: z.number().int(),
@@ -82,12 +87,14 @@ export const CardSchema = z.object({
 });
 
 export const CreateCardSchema = z.object({
+    storyId: z.string().uuid(),
     name: z.string().min(1).max(100),
     cardTypeId: z.string().uuid(),
     description: z.string().max(2000).optional(),
-    attributes: z.any().optional(),
+    attributes: z.array(AttributeWithValueSchema).nullable(),
     tags: z.array(z.string()).optional(),
     imageUrl: z.string().url().optional().or(z.literal('')),
+    hidden: z.boolean().optional(),
 });
 
 export const CardRoleSchema = z.object({
@@ -113,8 +120,10 @@ export const UpdateCardRoleSchema = z.object({
 });
 
 export const UpdateCardSchema = CardSchema.partial().omit({
-    id: true,
-    storyId: true,
     createdAt: true,
     updatedAt: true,
+}).extend({
+    id: z.string().uuid(),
+    storyId: z.string().uuid(),
+    attributes: z.any().optional(),
 });

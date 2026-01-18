@@ -4,7 +4,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { CreateCardRoleSchema } from '@/domain/schemas/card.schema';
-import { verifyStoryAccess } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 
 export async function GET(req: NextRequest) {
     try {
@@ -22,7 +22,10 @@ export async function GET(req: NextRequest) {
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'VIEW');
+        const permission = await checkStoryPermission(storyId, userId, CollaborationRole.View);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         const where: any = { storyId };
         if (cardTypeId) {
@@ -37,9 +40,7 @@ export async function GET(req: NextRequest) {
 
         return NextResponse.json(cardRoles);
     } catch (error: any) {
-        if (error.code === 'P2025' || error.message === 'Permission denied') {
-            return NextResponse.json({ error: error.message || 'Access denied' }, { status: 403 });
-        }
+
         console.error('CardRoles GET error:', error);
         return NextResponse.json({ error: 'Failed to fetch card roles' }, { status: 500 });
     }
@@ -64,7 +65,10 @@ export async function POST(req: NextRequest) {
         }
 
         const userId = (session.user as any).id;
-        await verifyStoryAccess(storyId, userId, 'EDIT');
+        const permission = await checkStoryPermission(storyId, userId, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
 
         const { name, description, cardTypeId } = parsed.data;
 

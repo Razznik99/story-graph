@@ -18,7 +18,8 @@ import {
     BookOpen
 } from 'lucide-react';
 import { useState } from 'react';
-import { cn } from '@/lib/utils'; // Assuming this utility exists, typical in shadcn
+import { cn } from '@/lib/utils';
+import { useTheme } from '@/providers/ThemeProvider';
 
 const TOP_NAV = [
     { name: 'Stories', href: '/stories', icon: BookOpen },
@@ -38,6 +39,8 @@ const BOTTOM_NAV = [
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const [isExpanded, setIsExpanded] = useState(false);
+    const { theme } = useTheme();
+    const isDark = theme.includes('dark');
 
     if (['/login', '/signup'].includes(pathname)) {
         return <>{children}</>;
@@ -57,18 +60,23 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {/* Logo Area */}
                 <div className="h-16 shrink-0 flex items-center justify-center border-b border-border bg-background/50 backdrop-blur-sm overflow-hidden">
                     <div className={cn("relative transition-all duration-300", isExpanded ? "w-10 h-10" : "w-8 h-8")}>
-                        <Image
-                            src="/logo-light.svg"
-                            alt="Story Graph"
-                            fill
-                            className="dark:hidden object-contain"
-                        />
-                        <Image
-                            src="/logo-dark.svg"
-                            alt="Story Graph"
-                            fill
-                            className="hidden dark:block object-contain"
-                        />
+                        {isDark ? (
+                            <Image
+                                src="/logo-dark.svg"
+                                alt="Story Graph"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        ) : (
+                            <Image
+                                src="/logo-light.svg"
+                                alt="Story Graph"
+                                fill
+                                className="object-contain"
+                                priority
+                            />
+                        )}
                     </div>
                 </div>
 

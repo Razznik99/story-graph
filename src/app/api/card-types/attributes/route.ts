@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { verifyStoryAccess, PermissionError } from '@/lib/permissions';
+import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
 import { CreateAttributeSchema } from '@/domain/schemas/card.schema';
 
 // GET /api/card-types/attributes?cardTypeId=...
@@ -22,11 +22,9 @@ export async function GET(req: NextRequest) {
         if (!cardType)
             return NextResponse.json({ error: 'Card type not found' }, { status: 404 });
 
-        try {
-            await verifyStoryAccess(cardType.storyId, session.user.id, 'VIEW');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(cardType.storyId, session.user.id, CollaborationRole.View);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         const attributes = await prisma.attributeDefinition.findMany({
@@ -58,11 +56,9 @@ export async function POST(req: NextRequest) {
         if (!cardType)
             return NextResponse.json({ error: 'Card type not found' }, { status: 404 });
 
-        try {
-            await verifyStoryAccess(cardType.storyId, session.user.id, 'EDIT');
-        } catch (e) {
-            if (e instanceof PermissionError) return NextResponse.json({ error: e.message }, { status: 403 });
-            throw e;
+        const permission = await checkStoryPermission(cardType.storyId, session.user.id, CollaborationRole.Edit);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
         }
 
         const existingAttr = await prisma.attributeDefinition.findFirst({
