@@ -12,167 +12,169 @@ import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Loader2, Lock, Users } from 'lucide-react';
+import { Lock, Users, Pencil, Trash2, LogIn, KeySquare } from 'lucide-react';
 import { useStoryStore } from '@/store/useStoryStore';
+import RequestAccessModal from './RequestAccessModal';
 
 interface StoryViewerProps {
-    story: any | null; // Typed loosely for now, should match API response
+    story: any | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
+    currentUserId?: string;
+    onEdit?: (story: any) => void; // Parent handles opening edit modal
 }
 
-export default function StoryViewer({ story, open, onOpenChange }: StoryViewerProps) {
+export default function StoryViewer({ story, open, onOpenChange, currentUserId, onEdit }: StoryViewerProps) {
     const router = useRouter();
-    const [requesting, setRequesting] = useState(false);
-    const [requestSent, setRequestSent] = useState(false);
     const setSelectedStoryId = useStoryStore((state) => state.setSelectedStoryId);
+
+    // Request Access Modal State
+    const [isRequestOpen, setIsRequestOpen] = useState(false);
 
     if (!story) return null;
 
-    // Determine access
-    const isOwner = false; // Need to check current user vs ownerId, likely passed or handled in parent. 
-    // Actually, `story.collaborators[0]` check from API:
-    // API returns specific collaborator record for current user.
-    // So if `story.collaborators.length > 0` (and we are in 'my-stories' or fetched with user context), we have access.
-    // But `story.ownerId` check requires knowing `userId`.
-    // Let's assume the parent (Page) handles the "Has Access" logic or we infer it.
-    // Simplest: Check if `story` object has a `role` property injected or use `collaborators`.
+    // --- Role Logic ---
+    const ownerId = story.ownerId || story.owner?.id;
+    const isOwner = currentUserId && ownerId === currentUserId;
 
-    // In My-Stories: We have access.
-    // In Public: We *might* have access.
-    // Let's check `story.collaborators`.
-    const myCollab = story.collaborators?.[0];
-    const hasAccess = !!myCollab || story.role === 'Owner'; // Rough check
-    // Wait, the API response for 'public' MIGHT not include `collaborators` for the searching user unless they are one?
-    // API Code: `collaborators: { where: { userId } }`.
-    // So if I am a collaborator, I will get my record.
+    // Find my collaboration record
+    const myCollab = story.collaborators?.find((c: any) => c.userId === currentUserId && c.accepted);
+    const myRole = isOwner ? 'Owner' : (myCollab?.role || null); // 'Edit', 'Comment', 'View'
 
-    // Also need to know if I am the owner. 
-    // The API returns `owner` object. 
-    // I don't easily have `userId` here without session context.
-    // Strategy: The parent page knows "My Stories" vs "Public".
-    // If it's in "My Stories", I have access.
-    // If it's in "Public", check `story.collaborators` length.
-    // If `story.collaborators.length > 0`, I have access (Edit/Comment/View).
-    // If `story.owner.email` === my email? (need session).
-
-    // Safe bet: "Access" property boolean passed from parent? 
-    // Or just "View" button is always there but restricted by middleware if I click it?
-    // "Request to Join" only appears if I DON'T have access.
-
-    const canEnter = hasAccess || (story.collaborators && story.collaborators.length > 0);
-    // WARNING: Owner check is missing if I am owner but collaborators array is empty.
-    // Ideally we pass `currentUserId` to this component. 
-    // For now, let's show "View" button for everyone on Public stories (click -> 404/401 if not authorized? No, that's bad UX).
-    // Let's assume if it's in "Public" tab AND I don't have a collab record, I need to request access?
-    // NOTE: Public stories are visible to everyone. "View" role is implicit for Public stories?
-    // "if the story is public there would be a view button and request to join (to request a higher collaboration role than view)"
-    // OK! So Public stories ALWAYS have "View".
-    // Private stories (via UUID lookup) ONLY have "Request to Join".
-
+    // Determine basic access
     const isPublic = story.visibility === 'public';
-    const handleView = () => {
-        setSelectedStoryId(story.id);
-        router.push('/dashboard');
-    };
+    const hasAccess = isOwner || !!myCollab;
 
-    const handleRequestAccess = async () => {
-        setRequesting(true);
-        try {
-            const res = await fetch(`/api/stories/${story.id}/request-access`, {
-                method: 'POST'
-            });
-            if (res.ok) {
-                setRequestSent(true);
-            } else {
-                // handle error
-                const txt = await res.text();
-                if (txt.includes('Already')) setRequestSent(true); // Treat duplicate as success
-            }
-        } catch (e) {
-            console.error(e);
-        } finally {
-            setRequesting(false);
-        }
+    // Logic for Buttons
+    const canEdit = isOwner || myRole === 'Edit';
+    const canDelete = isOwner; // Only owner
+    const canComment = isOwner || ['Edit', 'Comment'].includes(myRole);
+
+    const handleSelect = () => {
+        setSelectedStoryId(story.id, myRole);
+        router.push('/dashboard');
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-2xl">
-                <div className="grid md:grid-cols-[200px_1fr] gap-6">
+            <DialogContent className="sm:max-w-2xl p-0 overflow-hidden gap-0">
+                <div className="grid md:grid-cols-[240px_1fr] h-full sm:h-[500px]">
                     {/* Cover Section */}
-                    <div className="space-y-4">
-                        <div className="relative w-full aspect-[3/4] bg-surface-hover rounded-xl overflow-hidden border border-border">
+                    <div className="bg-surface-hover/30 p-6 flex flex-col gap-6 relative">
+                        <div className="relative w-full aspect-[3/4] bg-surface rounded-xl overflow-hidden border border-border/50 shadow-sm">
                             {story.coverUrl ? (
                                 <Image src={story.coverUrl} alt={story.title} fill className="object-cover" />
                             ) : (
-                                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface-hover to-background">
-                                    <span className="text-4xl font-serif opacity-20">{story.title.substring(0, 2).toUpperCase()}</span>
+                                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface to-surface-hover">
+                                    <span className="text-5xl font-serif opacity-10 font-bold select-none">{story.abbreviation?.toUpperCase()}</span>
                                 </div>
                             )}
                         </div>
 
-                        <div className="flex flex-col gap-2">
-                            {story.tags?.map((tag: string) => (
-                                <Badge key={tag} variant="secondary" className="justify-center cursor-default">{tag}</Badge>
+                        <div className="flex flex-wrap gap-2 justify-center">
+                            {story.tags?.slice(0, 5).map((tag: string) => (
+                                <Badge key={tag} variant="secondary" className="justify-center cursor-default bg-background/50 text-[10px] sm:text-xs text-accent">
+                                    {tag}
+                                </Badge>
                             ))}
                         </div>
                     </div>
 
                     {/* Details Section */}
-                    <div className="flex flex-col h-full">
-                        <DialogHeader>
-                            <div className="flex items-start justify-between">
+                    <div className="flex flex-col h-full bg-background relative">
+                        <DialogHeader className="p-6 pb-2">
+                            <div className="flex items-start justify-between gap-4">
                                 <div>
-                                    <DialogTitle className="text-2xl font-bold mb-1">{story.title}</DialogTitle>
-                                    <p className="text-sm text-text-tertiary">
-                                        <span className="font-mono text-xs p-1 bg-surface-hover rounded text-text-secondary mr-2">{story.abbreviation}</span>
-                                        by {story.owner?.name || story.owner?.username || 'Unknown'}
-                                    </p>
+                                    <DialogTitle className="text-2xl font-bold tracking-tight mb-1 leading-tight">{story.title}</DialogTitle>
+                                    <div className="flex items-center gap-2 text-sm text-text-tertiary">
+                                        <span className="font-mono text-xs px-1.5 py-0.5 bg-surface-hover rounded text-text-secondary border border-border/50">
+                                            {story.abbreviation}
+                                        </span>
+                                        <span>by <span className="text-text-primary font-medium">{story.owner?.username || story.owner?.name || 'Unknown'}</span></span>
+                                    </div>
                                 </div>
                                 {isPublic ? (
-                                    <Badge variant="outline" className="border-green-500/50 text-green-500">Public</Badge>
+                                    <Badge variant="outline" className="shrink-0 border-green-500/30 text-green-600 bg-green-500/5">Public</Badge>
                                 ) : (
-                                    <Badge variant="outline" className="border-border text-text-tertiary"><Lock className="w-3 h-3 mr-1" /> Private</Badge>
+                                    <Badge variant="outline" className="shrink-0 border-border text-text-tertiary bg-surface"><Lock className="w-3 h-3 mr-1" /> Private</Badge>
                                 )}
                             </div>
                         </DialogHeader>
 
-                        <div className="py-6 flex-1 text-sm text-text-secondary leading-relaxed whitespace-pre-wrap">
-                            {story.synopsis || "No synopsis available."}
+                        {/* Scrolling Content */}
+                        <div className="px-6 py-4 flex-1 overflow-y-auto text-sm text-text-secondary leading-relaxed custom-scrollbar">
+                            <div className="prose prose-sm dark:prose-invert max-w-none">
+                                {story.synopsis || <span className="italic opacity-50">No synopsis provided.</span>}
+                            </div>
                         </div>
 
-                        <div className="flex items-center gap-4 text-xs text-text-tertiary mb-6">
-                            <span className="flex items-center gap-1">
-                                <Users className="w-3 h-3" />
-                                {story._count?.collaborators || 0} Collaborators
-                            </span>
-                            {/* Genres could go here */}
+                        {/* Footer Stats & Actions */}
+                        <div className="p-6 border-t border-border bg-surface/30">
+                            <div className="flex items-center gap-4 text-xs text-text-tertiary mb-6">
+                                <span className="flex items-center gap-1.5">
+                                    <Users className="w-3.5 h-3.5" />
+                                    <span className="font-medium text-text-secondary">{story._count?.collaborators || 0}</span> Collaborators
+                                </span>
+                                <span className="w-1 h-1 rounded-full bg-border" />
+                                <span>{story.medium || 'Story'}</span>
+                                <span className="w-1 h-1 rounded-full bg-border" />
+                                <span>{story.status || 'Draft'}</span>
+                                <span className="w-1 h-1 rounded-full bg-border" />
+                                <span>{story.language || 'English'}</span>
+                            </div>
+
+                            <div className="flex flex-wrap gap-3">
+                                {/* Only show Select/Edit if we have access or if Public (View only) */}
+                                {(hasAccess || isPublic) && (
+                                    <Button onClick={handleSelect} className="flex-1 bg-accent text-accent-foreground hover:bg-accent/90">
+                                        <LogIn className="w-4 h-4 mr-2" />
+                                        {hasAccess ? 'Open Dashboard' : 'View Story'}
+                                    </Button>
+                                )}
+
+                                {/* Owner Actions */}
+                                {isOwner ? (
+                                    <>
+                                        <Button variant="outline" onClick={() => onEdit && onEdit(story)} className="px-3 hover:text-accent">
+                                            <Pencil className="w-4 h-4" />
+                                        </Button>
+                                        <Button variant="outline" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-200 dark:border-red-900/30">
+                                            <Trash2 className="w-4 h-4" />
+                                        </Button>
+                                    </>
+                                ) : (
+                                    /* Non-Owner Actions */
+                                    <>
+                                        {/* Join / Upgrade Request */}
+                                        <Button
+                                            variant="outline"
+                                            onClick={() => setIsRequestOpen(true)}
+                                            className={!hasAccess && !isPublic ? "flex-1" : ""} // If private & no access, button takes full width
+                                        >
+                                            {hasAccess ? (
+                                                <>
+                                                    <KeySquare className="w-4 h-4 mr-2 text-text-tertiary" />
+                                                    Upgrade Role
+                                                </>
+                                            ) : (
+                                                'Request to Join'
+                                            )}
+                                        </Button>
+                                    </>
+                                )}
+                            </div>
                         </div>
-
-                        <DialogFooter className="md:justify-start gap-3">
-                            {(isPublic || canEnter) && (
-                                <Button onClick={handleView} className="flex-1 md:flex-none">
-                                    {canEnter ? 'Open Dashboard' : 'View Story'}
-                                </Button>
-                            )}
-
-                            {(!canEnter || isPublic) && (
-                                <Button
-                                    variant="outline"
-                                    onClick={handleRequestAccess}
-                                    disabled={requesting || requestSent || (canEnter && !isPublic)} // Disable if private and already entered? No, logic: "request to join (to request a higher collaboration role)"
-                                    className="flex-1 md:flex-none"
-                                >
-                                    {requesting ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                                        requestSent ? 'Request Sent' :
-                                            canEnter ? 'Request Edit Access' : 'Request to Join'}
-                                </Button>
-                            )}
-                        </DialogFooter>
                     </div>
                 </div>
             </DialogContent>
+
+            <RequestAccessModal
+                open={isRequestOpen}
+                onOpenChange={setIsRequestOpen}
+                storyId={story.id}
+                storyTitle={story.title}
+                currentRole={myRole}
+            />
         </Dialog>
     );
 }

@@ -5,6 +5,7 @@ interface StoryCardProps {
     story: {
         id: string;
         title: string;
+        abbreviation: string;
         coverUrl?: string | null;
         owner?: {
             name: string | null;
@@ -47,7 +48,7 @@ export default function StoryCard({ story, variant, onClick }: StoryCardProps) {
                 ) : (
                     <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-surface-hover to-background text-text-tertiary">
                         <span className="text-4xl font-serif opacity-20 select-none">
-                            {story.title.substring(0, 2).toUpperCase()}
+                            {story.abbreviation.toUpperCase()}
                         </span>
                     </div>
                 )}

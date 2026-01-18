@@ -2,14 +2,15 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useSession } from 'next-auth/react';
 import { Button } from '@/components/ui/button';
 import { Plus } from 'lucide-react';
 import StoryList from '@/components/stories/StoryList';
-import StoryFilters from '@/components/stories/StoryFilters';
+import StorySearch from '@/components/stories/StorySearch';
 import StoryViewer from '@/components/stories/StoryViewer';
 import CreateStoryModal from '@/components/stories/CreateStoryModal';
-import StoryFilterPanel from '@/components/stories/StoryFilterPanel';
-import { StoryFilterState } from '@/components/stories/StoryFilterPanel';
+import StoryFilter from '@/components/stories/StoryFilter';
+import { StoryFilterState } from '@/components/stories/StoryFilter';
 import { STORY_GENRES, STORY_MEDIUM } from '@/domain/constants';
 
 function useDebounce<T>(value: T, delay: number): T {
@@ -39,6 +40,9 @@ export default function StoriesPage() {
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isViewerOpen, setIsViewerOpen] = useState(false);
 
+    const { data: session } = useSession();
+    const [selectedStoryForEdit, setSelectedStoryForEdit] = useState<any | null>(null);
+
     const [filters, setFilters] = useState<StoryFilterState>({
         q: '',
         genres: [],
@@ -64,6 +68,20 @@ export default function StoriesPage() {
                 params.set('variant', activeTab);
                 if (debouncedSearch) params.set('q', debouncedSearch);
 
+                // Apply Filters
+                if (filters.genres.length > 0) {
+                    filters.genres.forEach(g => params.append('genre', g));
+                }
+                if (filters.excludeGenres.length > 0) {
+                    filters.excludeGenres.forEach(g => params.append('excludeGenre', g));
+                }
+                if (filters.mediums.length > 0) {
+                    filters.mediums.forEach(m => params.append('medium', m));
+                }
+                if (filters.status) params.set('status', filters.status);
+                if (filters.language) params.set('language', filters.language);
+                if (filters.genreMode) params.set('genreMode', filters.genreMode);
+
                 const res = await fetch(`/api/stories?${params.toString()}`);
                 if (res.ok) {
                     const data = await res.json();
@@ -77,12 +95,23 @@ export default function StoriesPage() {
         };
 
         fetchStories();
-    }, [activeTab, debouncedSearch]);
+    }, [activeTab, debouncedSearch, filters]);
 
     const handleStoryClick = (story: any) => {
         setSelectedStory(story);
         setIsViewerOpen(true);
     };
+
+    const handleEditStory = (story: any) => {
+        setSelectedStoryForEdit(story);
+        setIsViewerOpen(false); // Close viewer
+        setIsCreateOpen(true);
+    };
+
+    // Reset edit story when modal closes
+    useEffect(() => {
+        if (!isCreateOpen) setSelectedStoryForEdit(null);
+    }, [isCreateOpen]);
 
     return (
         <div className="container mx-auto px-4 py-8 max-w-7xl">
@@ -114,7 +143,10 @@ export default function StoriesPage() {
                         </button>
                     </div>
                     <Button
-                        onClick={() => setIsCreateOpen(true)}
+                        onClick={() => {
+                            setSelectedStoryForEdit(null);
+                            setIsCreateOpen(true);
+                        }}
                         className="group bg-accent hover:bg-accent/90 text-accent-foreground px-4 py-1.5 h-auto"
                     >
                         <Plus className="w-4 h-4 mr-2 group-hover:scale-110 transition-transform" />
@@ -123,40 +155,61 @@ export default function StoriesPage() {
                 </div>
             </div>
 
-            <StoryFilters
-                search={search}
-                onSearchChange={setSearch}
-                placeholder={activeTab === 'public' ? "Search by title, synopsis, #tag, or UUID..." : "Search your stories..."}
-            />
-
-            <StoryList
-                stories={stories}
-                isLoading={loading}
-                variant={activeTab === 'my-stories' ? 'my-stories' : 'public'}
-                onStoryClick={handleStoryClick}
-            />
+            {activeTab === 'public' ? (
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
+                    <div className="lg:col-span-3 order-2 lg:order-1">
+                        <StorySearch
+                            search={search}
+                            onSearchChange={setSearch}
+                            placeholder="Search by title, synopsis, #tag, or UUID..."
+                        />
+                        <StoryList
+                            stories={stories}
+                            isLoading={loading}
+                            variant="public"
+                            onStoryClick={handleStoryClick}
+                        />
+                    </div>
+                    <div className="lg:col-span-1 order-1 lg:order-2">
+                        <div className="sticky top-4">
+                            <StoryFilter
+                                value={filters}
+                                onChange={setFilters}
+                                availableMediums={[...STORY_MEDIUM]}
+                            />
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                <>
+                    <StorySearch
+                        search={search}
+                        onSearchChange={setSearch}
+                        placeholder="Search your stories..."
+                    />
+                    <StoryList
+                        stories={stories}
+                        isLoading={loading}
+                        variant="my-stories"
+                        onStoryClick={handleStoryClick}
+                    />
+                </>
+            )}
 
             <CreateStoryModal
                 open={isCreateOpen}
                 onOpenChange={setIsCreateOpen}
+                story={selectedStoryForEdit}
+                key={selectedStoryForEdit?.id || 'new'}
             />
 
             <StoryViewer
                 story={selectedStory}
                 open={isViewerOpen}
                 onOpenChange={setIsViewerOpen}
+                currentUserId={session?.user?.id}
+                onEdit={handleEditStory}
             />
-            {activeTab === 'public' && (
-                <StoryFilterPanel
-                    value={filters}
-                    onChange={setFilters}
-                    availableGenres={[...STORY_GENRES]}
-                    availableMediums={[...STORY_MEDIUM]}
-                />
-            )}
         </div>
-
-
     );
-
 }

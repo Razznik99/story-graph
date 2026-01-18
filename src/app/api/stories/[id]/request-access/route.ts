@@ -2,51 +2,86 @@ import { NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
+import { RequestAccessSchema } from '@/domain/schemas/collaboration.schema';
 import { z } from 'zod';
 
-export async function POST(req: Request, props: { params: Promise<{ id: string }> }) {
-    const params = await props.params;
-    const session = await getServerSession(authOptions) as any;
-
-    if (!session || !session.user) {
-        return new NextResponse('Unauthorized', { status: 401 });
-    }
-
+export async function POST(
+    req: Request,
+    { params }: { params: { id: string } }
+) {
     try {
-        const userId = (session.user as any).id;
-        const storyId = params.id;
+        const session = await getServerSession(authOptions) as any;
+        if (!session?.user) {
+            return new NextResponse('Unauthorized', { status: 401 });
+        }
 
-        // Check if collaboration request already exists
-        const existing = await prisma.collaboration.findUnique({
-            where: {
-                storyId_userId: {
-                    storyId,
-                    userId,
-                }
-            }
+        const storyId = params.id;
+        const body = await req.json();
+        const { role, message } = RequestAccessSchema.parse(body);
+
+        let userId = session.user.id;
+        if (!userId && session.user.email) {
+            const user = await prisma.user.findUnique({ where: { email: session.user.email } });
+            userId = user?.id;
+        }
+
+        if (!userId) {
+            return new NextResponse('User not found', { status: 401 });
+        }
+
+        // Check if story exists
+        const story = await prisma.story.findUnique({
+            where: { id: storyId },
+            select: { ownerId: true }
         });
 
-        if (existing) {
-            if (existing.accepted) {
-                return new NextResponse('Already a member', { status: 409 });
-            }
+        if (!story) {
+            return new NextResponse('Story not found', { status: 404 });
+        }
+
+        if (story.ownerId === userId) {
+            return new NextResponse('You are the owner', { status: 400 });
+        }
+
+        // Check for existing collaboration
+        const existingCollab = await prisma.collaboration.findUnique({
+            where: { storyId_userId: { storyId, userId } }
+        });
+
+        // Check for existing PENDING request
+        const existingRequest = await prisma.collaborationRequest.findUnique({
+            where: { storyId_userId: { storyId, userId } }
+        });
+
+        if (existingRequest && existingRequest.status === 'PENDING') {
             return new NextResponse('Request already pending', { status: 409 });
         }
 
-        // Create pending collaboration
-        await prisma.collaboration.create({
-            data: {
+        // Create or Update Request
+        // Using upsert to handle if there was a previous rejected/approved one we want to overwrite
+        await prisma.collaborationRequest.upsert({
+            where: { storyId_userId: { storyId, userId } },
+            create: {
                 storyId,
                 userId,
-                role: 'View', // Default to View for requests
-                accepted: false,
+                role,
+                message,
+                status: 'PENDING'
+            },
+            update: {
+                role,
+                message,
+                status: 'PENDING'
             }
         });
 
-        return new NextResponse('Request sent', { status: 200 });
+        return new NextResponse('Request sent', { status: 201 });
 
     } catch (error) {
-        console.error('[STORY_REQUEST_ACCESS]', error);
+        if (error instanceof z.ZodError) {
+            return new NextResponse('Invalid data', { status: 422 });
+        }
+        console.error('[REQUEST_ACCESS]', error);
         return new NextResponse('Internal Error', { status: 500 });
     }
 }

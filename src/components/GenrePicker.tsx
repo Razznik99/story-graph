@@ -32,8 +32,8 @@ export default function GenrePicker({ selected, onChange }: GenrePickerProps) {
 
     const addGenre = (genre: string) => {
         onChange([...selected, genre]);
-        setSearch(''); // Clear search to show more or keep? Usually clear is better for multi
-        // Keep focus?
+        setSearch('');
+        setIsOpen(false);
     };
 
     const removeGenre = (genre: string) => {

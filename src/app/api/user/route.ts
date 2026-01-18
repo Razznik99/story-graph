@@ -14,3 +14,32 @@ export async function GET() {
 
     return new NextResponse('Unauthorized', { status: 401 })
 }
+
+import { UpdateUserSchema } from "@/domain/schemas/user.schema";
+import prisma from "@/lib/prisma";
+
+export async function PATCH(request: Request) {
+    const session = await getServerSession(authOptions) as any;
+
+    if (!session || !session.user) {
+        return new NextResponse("Unauthorized", { status: 401 });
+    }
+
+    try {
+        const body = await request.json();
+        const validatedData = UpdateUserSchema.parse(body);
+
+        const userId = session.user.id;
+
+        const updatedUser = await prisma.user.update({
+            where: { id: userId },
+            data: validatedData,
+        });
+
+        return NextResponse.json(updatedUser);
+
+    } catch (error) {
+        console.error("[USER_UPDATE]", error);
+        return new NextResponse("Internal Error", { status: 500 });
+    }
+}

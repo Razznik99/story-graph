@@ -17,7 +17,12 @@ export async function GET() {
             take: 50,
         });
 
-        return NextResponse.json(tags);
+        const sanitizedTags = tags.map(tag => ({
+            ...tag,
+            name: tag.name.replace(/^#/, '')
+        }));
+
+        return NextResponse.json(sanitizedTags);
     } catch (error) {
         console.error('Global Tags GET error:', error);
         return NextResponse.json({ error: 'Failed to fetch tags' }, { status: 500 });

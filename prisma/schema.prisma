@@ -118,6 +118,12 @@ enum CollaborationRole {
   View
 }
 
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 enum AnalysisType {
   auto
   manual
@@ -190,7 +196,6 @@ model User {
   emailVerified DateTime?
   image         String?
   username      String?   @unique @db.VarChar(20)
-  password      String? // null if OAuth
   
   accounts      Account[]
   sessions      Session[]
@@ -200,6 +205,7 @@ model User {
 
   stories        Story[]
   collaborations Collaboration[]
+  collaborationRequests   CollaborationRequest[]
   comments       Comment[]
   suggestions    Suggestion[]
 
@@ -222,6 +228,7 @@ model Story {
   ownerId          String
   owner            User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
   collaborators    Collaboration[]
+  collaborationRequests   CollaborationRequest[]
   cardTypes        CardType[]
   attributeDefs    AttributeDefinition[]
   eventTypes       EventType[]
@@ -259,6 +266,23 @@ model Collaboration {
   acceptedAt DateTime? // optional timestamp; becomes non-null when accepted
 
   @@unique([storyId, userId])
+}
+
+model CollaborationRequest {
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  role    CollaborationRole
+  message String?           @db.VarChar(500)
+  status  RequestStatus     @default(PENDING)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storyId, userId]) // Limit one request per user per story to avoid spam
 }
 
 model Comment {
@@ -633,4 +657,3 @@ model VerificationToken {
 
   @@unique([identifier, token])
 }
-
