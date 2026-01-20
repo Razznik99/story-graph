@@ -5,6 +5,7 @@ import { useMemo, useEffect, useState } from "react";
 import { AttributeDefinition, Card } from "@prisma/client";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
     Select,
     SelectContent,
@@ -28,6 +29,7 @@ interface Props {
 interface AttributeConfig {
     options?: string[];
     unit?: string;
+    cardTypeId?: string;
 }
 
 export default function AttributeField({
@@ -53,17 +55,29 @@ export default function AttributeField({
             definition.attrType === "MultiLink"
         ) {
             setLoading(true);
-            // Ideally fetched via a hook or passed generic searcher, 
-            // but assuming we can fetch generic cards here or receive valid options
-            fetch(`/api/cards?storyId=${storyId}`)
+            let url = `/api/cards?storyId=${storyId}`;
+            // If config has cardTypeId, we could filter server side if API supports it,
+            // otherwise we filter client side. Assuming API might not support it yet,
+            // we'll filter client side for now, OR if the user implied the route supports it.
+            // But to be safe and efficient, let's fetch all and filter client side as requested.
+            fetch(url)
                 .then((res) => res.json())
                 .then((data) => {
-                    if (Array.isArray(data)) setAvailableCards(data);
+                    if (Array.isArray(data)) {
+                        let filtered = data;
+                        if (config.cardTypeId) {
+                            filtered = data.filter((c: any) =>
+                                c.cardTypeId === config.cardTypeId ||
+                                (c.cardType && c.cardType.id === config.cardTypeId)
+                            );
+                        }
+                        setAvailableCards(filtered);
+                    }
                 })
                 .catch((err) => console.error(err))
                 .finally(() => setLoading(false));
         }
-    }, [definition.attrType, storyId]);
+    }, [definition.attrType, storyId, config.cardTypeId]);
 
     const handleUnitValueChange = (val: string | number, type: 'value' | 'unit') => {
         const current = (typeof value === 'object' && value) ? value : { value: 0, unit: config.unit || '' };
@@ -78,6 +92,7 @@ export default function AttributeField({
                         value={value || ""}
                         onChange={(e) => onChange(e.target.value)}
                         placeholder={`Enter ${definition.name}...`}
+                        className="focus-within:ring-accent"
                     />
                 );
 
@@ -85,9 +100,17 @@ export default function AttributeField({
                 return (
                     <Input
                         type="number"
+                        className="focus-within:ring-accent"
                         value={value || ""}
                         onChange={(e) => onChange(Number(e.target.value))}
                         placeholder="0"
+                        onKeyDown={(e) => {
+                            // Basic restriction to 0-9 and controls
+                            if (!/[0-9]/.test(e.key) &&
+                                !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', '.'].includes(e.key)) {
+                                e.preventDefault();
+                            }
+                        }}
                     />
                 );
 
@@ -99,7 +122,13 @@ export default function AttributeField({
                             type="number"
                             value={unitVal.value}
                             onChange={(e) => handleUnitValueChange(e.target.value, 'value')}
-                            className="flex-1"
+                            className="flex-1 focus-within:ring-accent"
+                            onKeyDown={(e) => {
+                                if (!/[0-9]/.test(e.key) &&
+                                    !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', '.'].includes(e.key)) {
+                                    e.preventDefault();
+                                }
+                            }}
                         />
                         <div className="bg-secondary px-3 py-2 rounded-md text-sm font-medium border border-border min-w-[3rem] text-center">
                             {config.unit || unitVal.unit || '-'}
@@ -109,23 +138,18 @@ export default function AttributeField({
 
             case "Option":
                 return (
-                    <Select value={value || ""} onValueChange={onChange}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select an option" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {config.options?.map((opt) => (
-                                <SelectItem key={opt} value={opt}>
-                                    {opt}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                        options={config.options?.map(opt => ({ label: opt, value: opt })) || []}
+                        value={value || ""}
+                        onChange={(val) => onChange(val || "")}
+                        placeholder="Select an option"
+                        searchPlaceholder="Search options..."
+                        fullWidth
+                    />
                 );
 
             case "MultiOption":
-                // Simple implementation: multiselect via tags or checkboxes?
-                // Using a simple list of badges + select to add
+                // Simple implementation: multiselect via tags
                 const currentOptions = Array.isArray(value) ? value : [];
                 const availableOptions = config.options?.filter(o => !currentOptions.includes(o)) || [];
 
@@ -141,36 +165,31 @@ export default function AttributeField({
                                 </Badge>
                             ))}
                         </div>
-                        <Select
-                            value=""
-                            onValueChange={(val) => {
+                        <SearchableSelect
+                            options={availableOptions.map(opt => ({ label: opt, value: opt }))}
+                            value={null}
+                            onChange={(val) => {
                                 if (val) onChange([...currentOptions, val]);
                             }}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Add option..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availableOptions.map((opt) => (
-                                    <SelectItem key={opt} value={opt}>{opt}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            placeholder="Add option..."
+                            searchPlaceholder="Search options..."
+                            fullWidth
+                            resetAfterSelect
+                        />
                     </div>
                 );
 
             case "Link":
                 return (
-                    <Select value={value || ""} onValueChange={onChange} disabled={loading}>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select card..." />
-                        </SelectTrigger>
-                        <SelectContent>
-                            {availableCards.map(c => (
-                                <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <SearchableSelect
+                        options={availableCards.map(c => ({ label: c.name, value: c.id }))}
+                        value={value || ""}
+                        onChange={(val) => onChange(val || "")}
+                        placeholder="Select card..."
+                        searchPlaceholder="Search cards..."
+                        fullWidth
+                        disabled={loading}
+                    />
                 );
 
             case "MultiLink":
@@ -192,22 +211,18 @@ export default function AttributeField({
                                 )
                             })}
                         </div>
-                        <Select
-                            value=""
-                            onValueChange={(val) => {
+                        <SearchableSelect
+                            options={availLinks.map(c => ({ label: c.name, value: c.id }))}
+                            value={null}
+                            onChange={(val) => {
                                 if (val) onChange([...currentLinks, val]);
                             }}
+                            placeholder="Link card..."
+                            searchPlaceholder="Search cards..."
+                            fullWidth
                             disabled={loading}
-                        >
-                            <SelectTrigger>
-                                <SelectValue placeholder="Link card..." />
-                            </SelectTrigger>
-                            <SelectContent>
-                                {availLinks.map(c => (
-                                    <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
+                            resetAfterSelect
+                        />
                     </div>
                 );
 

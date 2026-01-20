@@ -4,7 +4,8 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { CreateCardRoleSchema } from '@/domain/schemas/card.schema';
-import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
+import { checkStoryPermission } from '@/lib/permissions';
+import { CollaborationRole } from '@/domain/roles';
 
 export async function GET(req: NextRequest) {
     try {

@@ -1,19 +1,37 @@
 import { useState, useEffect } from 'react';
 import { Card as CardType, AttributeDefinition, Suggestion } from '@/domain/types';
-import { CollaborationRole } from '@/lib/permissions';
+import { CollaborationRole } from '@/domain/roles';
 import AttributeField from './AttributeField';
+import { SearchableSelect } from '@/components/ui/searchable-select';
 import TagInput from '../TagInput';
-import { X, Plus, Image as ImageIcon, Check, Trash2, AlertCircle } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+    Dialog,
+    DialogContent,
+    DialogHeader,
+    DialogTitle,
+    DialogFooter,
+} from '@/components/ui/dialog';
 
 type CardTypeOption = { id: string; name: string; prefix: string };
+
+interface CardEditorProps {
+    storyId: string;
+    card: (CardType & { cardType?: { id: string;[key: string]: any } }) | null;
+    onClose: () => void;
+    suggestion?: Suggestion | null;
+    onSuggestionAccepted?: () => void;
+    inline?: boolean;
+    onDelete?: () => void;
+}
 
 export default function CardEditor({
     storyId,
@@ -23,15 +41,7 @@ export default function CardEditor({
     onSuggestionAccepted,
     inline = false,
     onDelete,
-}: {
-    storyId: string;
-    card: (CardType & { cardType?: { id: string;[key: string]: any } }) | null;
-    onClose: () => void;
-    suggestion?: Suggestion | null;
-    onSuggestionAccepted?: () => void;
-    inline?: boolean;
-    onDelete?: () => void;
-}) {
+}: CardEditorProps) {
     const [cardTypes, setCardTypes] = useState<CardTypeOption[]>([]);
     const [formData, setFormData] = useState({
         name: '',
@@ -98,17 +108,15 @@ export default function CardEditor({
     };
 
     const handleSelectChange = (value: string) => {
-        setFormData(prev => ({ ...prev, cardTypeId: value }));
-        // Reset attributes when type changes? 
-        // Maybe we should warn user, but for now we just keep them, 
-        // though the UI available definitions will change.
+        if (attributes.length > 0) {
+            if (confirm('Changing card type will remove all current attributes. Continue?')) {
+                setAttributes([]);
+                setFormData(prev => ({ ...prev, cardTypeId: value }));
+            }
+        } else {
+            setFormData(prev => ({ ...prev, cardTypeId: value }));
+        }
     };
-
-    const handleSwitchChange = (checked: boolean) => {
-        setFormData(prev => ({ ...prev, hidden: checked }));
-    };
-
-
 
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
@@ -216,264 +224,297 @@ export default function CardEditor({
         }
     };
 
-    const Content = () => (
-        <div className={`flex flex-col h-full bg-surface ${inline ? '' : 'rounded-2xl shadow-2xl overflow-hidden max-h-[90vh] w-full max-w-3xl relative animate-in zoom-in-95'}`}>
-            {/* Header */}
-            <div className="p-6 border-b border-border flex justify-between items-center bg-surface shrink-0">
-                <div>
-                    <h2 className="text-2xl font-bold text-foreground">{card ? 'Edit Card' : 'Create New Card'}</h2>
-                    <p className="text-sm text-muted-foreground">Fill in the details below to {card ? 'update' : 'create'} your card.</p>
-                </div>
-                <div className="flex items-center gap-2">
-                    {inline && (
-                        <>
-                            {card && onDelete && (
-                                <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={handleDelete}
-                                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10"
-                                    title="Delete Card"
-                                >
-                                    <Trash2 className="w-5 h-5" />
-                                </Button>
-                            )}
-                            <Button
-                                variant="default"
-                                size="icon"
-                                onClick={() => handleSubmit()}
-                                disabled={isSubmitting}
-                                className="bg-accent text-accent-foreground hover:bg-accent/90"
-                                title="Save Changes"
-                            >
-                                <Check className="w-5 h-5" />
-                            </Button>
-                        </>
-                    )}
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onClose}
-                        className="text-muted-foreground hover:text-foreground"
-                        title="Close"
-                    >
-                        <X className="w-6 h-6" />
-                    </Button>
-                </div>
-            </div>
-
-            {/* Scrollable Content */}
-            <ScrollArea className="flex-1">
-                <div className="p-6">
-                    {error && (
-                        <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium flex items-center gap-2">
-                            <AlertCircle className="w-5 h-5" />
-                            {error}
-                        </div>
-                    )}
-
-                    <form onSubmit={handleSubmit} className="space-y-8">
-                        {/* Basic Info Section */}
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Basic Information</h3>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label>Name *</Label>
-                                    <Input
-                                        name="name"
-                                        value={formData.name}
-                                        onChange={handleTextChange}
-                                        placeholder="e.g. The One Ring"
-                                        required
-                                    />
-                                </div>
-
-                                <div className="space-y-2">
-                                    <Label>Type *</Label>
-                                    <Select value={formData.cardTypeId} onValueChange={handleSelectChange}>
-                                        <SelectTrigger>
-                                            <SelectValue placeholder="Select type" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {cardTypes.map(type => (
-                                                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Description</Label>
-                                <Textarea
-                                    name="description"
-                                    value={formData.description}
-                                    onChange={handleTextChange}
-                                    rows={4}
-                                    placeholder="Describe this card..."
-                                    className="resize-none"
-                                />
-                            </div>
-                        </div>
-
-                        {/* Media & Tags Section */}
-                        <div className="space-y-4">
-                            <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Media & Tags</h3>
-
-                            <div className="space-y-2">
-                                <Label>Image URL</Label>
-                                <div className="relative">
-                                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                                    <Input
-                                        name="imageUrl"
-                                        value={formData.imageUrl}
-                                        onChange={handleTextChange}
-                                        className="pl-9"
-                                        placeholder="https://example.com/image.jpg"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <Label>Tags</Label>
-                                <TagInput
-                                    value={formData.tags}
-                                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
-                                    storyId={storyId}
-                                />
-                            </div>
-                        </div>
-
-                        {/* Attributes Section */}
-                        <div className="space-y-4">
-                            <div className="flex justify-between items-center">
-                                <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">Attributes</h3>
-                                <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => setAttributes(prev => [...prev, { attrId: '', value: '' }])}
-                                    className="text-accent hover:text-accent font-medium gap-1"
-                                >
-                                    <Plus className="w-4 h-4" /> Add Attribute
-                                </Button>
-                            </div>
-
-                            <div className="space-y-3">
-                                {attributes.length === 0 && (
-                                    <div className="text-center py-6 border-2 border-dashed border-border rounded-xl text-muted-foreground text-sm">
-                                        No attributes added yet.
-                                    </div>
-                                )}
-                                {attributes.map((attr, index) => (
-                                    <div key={index} className="p-4 bg-background border border-border rounded-xl shadow-sm group hover:border-accent/50 transition-colors">
-                                        <AttributeField
-                                            definition={availableAttrs.find(a => a.id === attr.attrId) || { id: attr.attrId, name: 'Unknown', attrType: 'Text', config: null, cardTypeId: '', storyId: '', createdAt: new Date(), description: null }}
-                                            // usedAttributes={attributes.map(a => a.attrId).filter((id, i) => id && i !== index)}
-                                            value={attr}
-                                            onChange={newVal => {
-                                                const updated = [...attributes];
-                                                updated[index] = newVal;
-                                                setAttributes(updated);
-                                            }}
-                                            storyId={storyId}
-                                        />
-                                        <div className="mt-2 flex justify-end">
-                                            <Button
-                                                type="button"
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => {
-                                                    const updated = [...attributes];
-                                                    updated.splice(index, 1);
-                                                    setAttributes(updated);
-                                                }}
-                                                className="text-xs text-red-500 hover:text-red-600 hover:bg-red-500/10 h-auto py-1"
-                                            >
-                                                Remove Attribute
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        {/* Visibility */}
-                        <div className="pt-2">
-                            <div className="flex items-center gap-4 p-4 bg-background border border-border rounded-xl">
-                                <Switch
-                                    checked={formData.hidden}
-                                    onCheckedChange={handleSwitchChange}
-                                    id="hidden-switch"
-                                />
-                                <div className="space-y-0.5">
-                                    <Label htmlFor="hidden-switch" className="text-base">Hidden Card</Label>
-                                    <div className="text-xs text-muted-foreground">Hide this card from the main list views</div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-            </ScrollArea>
-
-            {/* Footer (Only show if NOT inline) */}
-            {!inline && (
-                <div className="p-6 border-t border-border bg-surface flex justify-end gap-3 shrink-0">
-                    <Button
-                        type="button"
-                        variant="outline"
-                        onClick={onClose}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        onClick={() => handleSubmit()}
-                        disabled={isSubmitting}
-                        className="bg-accent text-accent-foreground hover:bg-accent/90"
-                    >
-                        {isSubmitting ? 'Processing...' :
-                            suggestion ? 'Accept Suggestion' :
-                                userRole === CollaborationRole.Comment ? 'Suggest Change' :
-                                    card ? 'Update Card' : 'Create Card'}
-                    </Button>
+    const renderFormContent = () => (
+        <form onSubmit={handleSubmit} className="space-y-6 pt-2">
+            {error && (
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5" />
+                    {error}
                 </div>
             )}
 
-            {/* Suggestion Modal should technically be its own dialog or managed at a higher level, but keeping it here for now */}
-            {/* Reusing standard approach for nested modal if possible, or just strict overlay */}
+            {/* Top Row: Basic Info */}
+            <div className="grid grid-cols-2 gap-4">
+                <div className="flex flex-col space-y-2">
+                    <Label htmlFor="name" className="text-text-secondary">Name</Label>
+                    <Input
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleTextChange}
+                        placeholder="The Great Sword"
+                        required
+                        className="bg-surface border-border focus-within:ring-accent"
+                    />
+                </div>
+                <div className="space-y-2">
+                    <Label className="text-text-secondary">Type</Label>
+                    <Select value={formData.cardTypeId} onValueChange={handleSelectChange}>
+                        <SelectTrigger className="bg-surface border-border">
+                            <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-surface border-border border-accent">
+                            {cardTypes.map(type => (
+                                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+            </div>
+
+            {/* Description */}
+            <div className="space-y-2">
+                <Label htmlFor="description" className="text-text-secondary">Description</Label>
+                <Textarea
+                    id="description"
+                    name="description"
+                    value={formData.description}
+                    onChange={handleTextChange}
+                    placeholder="A brief description..."
+                    className="bg-surface border-border focus-within:ring-accent min-h-[100px]"
+                />
+            </div>
+
+            {/* Media & Tags */}
+            <div className="space-y-2">
+                <Label htmlFor="imageUrl" className="text-text-secondary">Image URL</Label>
+                <div className="relative">
+                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                    <Input
+                        id="imageUrl"
+                        name="imageUrl"
+                        value={formData.imageUrl}
+                        onChange={handleTextChange}
+                        className="bg-surface border-border focus-within:ring-accent pl-9"
+                        placeholder="https://..."
+                    />
+                </div>
+            </div>
+            <div className="space-y-2">
+                <Label className="text-text-secondary">Tags</Label>
+                <TagInput
+                    value={formData.tags}
+                    onChange={(tags) => setFormData(prev => ({ ...prev, tags }))}
+                    storyId={storyId}
+                    placeholder="Add #tags..."
+                />
+            </div>
+
+            {/* Attributes Section */}
+            <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                    <Label className="text-text-secondary uppercase tracking-wider text-xs font-semibold">Attributes</Label>
+
+                </div>
+                <div className="space-y-3 rounded-lg bg-surface/50 p-1">
+                    {attributes.length === 0 && (
+                        <div className="text-center py-4 border-2 border-dashed border-border rounded-lg text-muted-foreground text-xs">
+                            No attributes added yet.
+                        </div>
+                    )}
+                    {attributes.map((attr, index) => (
+                        <div key={index} className="p-3 bg-background border border-border rounded-lg shadow-sm group hover:border-accent/30 transition-colors">
+                            <div className="flex items-start gap-2">
+                                <div className="flex-1">
+                                    <AttributeField
+                                        definition={availableAttrs.find(a => a.id === attr.attrId) || { id: attr.attrId, name: 'Select Attribute', attrType: 'Text', config: null, cardTypeId: '', storyId: '', createdAt: new Date(), description: null }}
+                                        value={attr.value}
+                                        onChange={newVal => {
+                                            const updated = [...attributes];
+                                            updated[index] = { ...updated[index], value: newVal };
+                                            setAttributes(updated);
+                                        }}
+                                        storyId={storyId}
+                                    />
+                                    {/* Attribute selector removed as we now select before adding */}
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="icon"
+                                    onClick={() => {
+                                        const updated = [...attributes];
+                                        updated.splice(index, 1);
+                                        setAttributes(updated);
+                                    }}
+                                    className="text-muted-foreground hover:text-red-500 h-8 w-8 -mt-1"
+                                    title="Remove Attribute"
+                                >
+                                    <Trash2 className="w-4 h-4" />
+                                </Button>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+                <div className='bg-background'>
+                    <SearchableSelect
+                        options={availableAttrs
+                            .filter(a => !attributes.some(attr => attr.attrId === a.id))
+                            .map(a => ({ label: a.name, value: a.id }))}
+                        value={null}
+                        onChange={(val) => {
+                            if (val) {
+                                setAttributes(prev => [...prev, { attrId: val, value: '' }]);
+                            }
+                        }}
+                        placeholder="Add Attribute..."
+                        searchPlaceholder="Search attributes..."
+                        fullWidth
+                        resetAfterSelect
+                        trigger={
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full justify-center gap-2 border-dashed border-2 hover:border-accent hover:text-text-primary"
+                            >
+                                <Plus className="w-4 h-4" /> Add Attribute
+                            </Button>
+                        }
+                    />
+                </div>
+            </div>
+
+            {/* Visibility */}
+            <div className="flex items-center gap-4 p-3 bg-surface border border-border rounded-lg">
+
+                <Button
+                    type="button"
+                    variant={formData.hidden ? "secondary" : "outline"}
+                    onClick={() =>
+                        setFormData(prev => ({
+                            ...prev,
+                            hidden: !prev.hidden,
+                        }))
+                    }
+                    className={cn(
+                        "px-3",
+                        formData.hidden &&
+                        "bg-accent/10 text-accent border-accent/20 hover:bg-accent/20"
+                    )}
+                    title="Toggle Hidden"
+                >
+                    {formData.hidden ? (
+                        <EyeOff className="w-5 h-5" />
+                    ) : (
+                        <Eye className="w-5 h-5" />
+                    )}
+                </Button>
+                <div className="space-y-0.5">
+                    <div className="text-sm font-medium">Hidden Card</div>
+                    <div className="text-xs text-muted-foreground">
+                        Hide this card from main lists
+                    </div>
+                </div>
+            </div>
+        </form>
+    );
+
+    const ModalFooter = () => (
+        <DialogFooter className="gap-2 sm:gap-0">
+            {inline && card && onDelete && (
+                <Button
+                    variant="ghost"
+                    onClick={handleDelete}
+                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10 mr-auto"
+                >
+                    Delete
+                </Button>
+            )}
+            {!inline && (
+                <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-surface hover:text-accent">
+                    Cancel
+                </Button>
+            )}
+            <Button
+                onClick={() => handleSubmit()}
+                disabled={isSubmitting}
+                className="bg-accent text-accent-foreground hover:bg-accent/90"
+            >
+                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {suggestion ? 'Accept Suggestion' :
+                    userRole === CollaborationRole.Comment ? 'Suggest Change' :
+                        card ? 'Save Changes' : 'Create Card'}
+            </Button>
+        </DialogFooter>
+    );
+
+    // If inline, render without Dialog wrapper
+    if (inline) {
+        return (
+            <div className="flex flex-col h-full bg-surface p-4">
+                <div className="mb-4">
+                    <h2 className="text-xl font-bold text-foreground">{card ? 'Edit Card' : 'New Card'}</h2>
+                </div>
+                <div className="flex-1 overflow-y-auto pr-2">
+                    {renderFormContent()}
+                </div>
+                <div className="pt-4 mt-4 border-t border-border">
+                    <ModalFooter />
+                </div>
+
+                {/* Suggestion Modal (Manual overlay for now if nested) */}
+                {showSuggestionModal && (
+                    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <div className="w-full max-w-md bg-surface p-6 rounded-2xl shadow-2xl border border-border">
+                            <h3 className="text-lg font-bold mb-2 text-foreground">Suggest Changes</h3>
+                            <Textarea
+                                value={suggestionMessage}
+                                onChange={(e) => setSuggestionMessage(e.target.value)}
+                                className="mb-4"
+                                placeholder="Reason for this change..."
+                                rows={4}
+                            />
+                            <div className="flex justify-end gap-3">
+                                <Button variant="outline" onClick={() => setShowSuggestionModal(false)}>Cancel</Button>
+                                <Button onClick={handleSendSuggestion} disabled={!suggestionMessage.trim() || isSubmitting}>Submit</Button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </div>
+        );
+    }
+
+    // Default Dialog View
+    return (
+        <>
+            <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
+                <DialogContent className="sm:max-w-[700px] max-h-[90vh] overflow-y-auto transition-all">
+                    <DialogHeader>
+                        <DialogTitle className="text-2xl font-bold text-accent">
+                            {card ? 'Edit Card' : 'Create New Card'}
+                        </DialogTitle>
+                    </DialogHeader>
+
+                    {renderFormContent()}
+
+                    <ModalFooter />
+                </DialogContent>
+            </Dialog>
+
+            {/* Suggestion Modal Helper */}
             {showSuggestionModal && (
-                <div className="absolute inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    {/* Simple manual modal override for now as nesting Dialogs can be tricky */}
-                    <div className="w-full max-w-md bg-surface p-6 rounded-2xl shadow-2xl border border-border animate-in zoom-in-95 duration-200">
-                        <h3 className="text-lg font-bold mb-2 text-foreground">Suggest Changes</h3>
-                        <p className="text-sm text-muted-foreground mb-4">
+                <Dialog open={true} onOpenChange={() => setShowSuggestionModal(false)}>
+                    <DialogContent className="sm:max-w-md z-[150]">
+                        <DialogHeader>
+                            <DialogTitle>Suggest Changes</DialogTitle>
+                        </DialogHeader>
+                        <p className="text-sm text-muted-foreground mb-2">
                             You have comment-only access. Describe your changes below to submit a suggestion.
                         </p>
                         <Textarea
                             value={suggestionMessage}
                             onChange={(e) => setSuggestionMessage(e.target.value)}
-                            className="mb-4"
                             placeholder="Why are you making these changes?"
-                            rows={4}
+                            className="min-h-[100px]"
                         />
-                        <div className="flex justify-end gap-3">
-                            <Button variant="outline" onClick={() => setShowSuggestionModal(false)}>Cancel</Button>
+                        <DialogFooter>
+                            <Button variant="ghost" onClick={() => setShowSuggestionModal(false)}>Cancel</Button>
                             <Button onClick={handleSendSuggestion} disabled={!suggestionMessage.trim() || isSubmitting}>Submit Suggestion</Button>
-                        </div>
-                    </div>
-                </div>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
             )}
-        </div>
-    );
-
-    if (inline) {
-        return <Content />;
-    }
-
-    return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <Content />
-        </div>
+        </>
     );
 }

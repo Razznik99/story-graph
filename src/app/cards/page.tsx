@@ -310,7 +310,7 @@ export default function CardsPage() {
                         className={cn("px-3", showHidden && "bg-accent/10 text-accent border-accent/20 hover:bg-accent/20")}
                         title="Toggle Hidden Cards"
                     >
-                        {showHidden ? <Eye className="w-5 h-5" /> : <EyeOff className="w-5 h-5" />}
+                        {showHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
                     </Button>
 
                     {/* Create Button */}
@@ -343,8 +343,8 @@ export default function CardsPage() {
                     onClick={() => setSelectedType('all')}
                     className={cn("px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap border",
                         selectedType === 'all'
-                            ? 'bg-foreground text-background border-foreground'
-                            : 'bg-surface text-muted-foreground border-border hover:border-foreground/50'
+                            ? 'bg-accent text-text-primary border-foreground'
+                            : 'bg-surface text-muted-foreground border-border hover:border-accent'
                     )}
                 >
                     All Cards <span className="ml-1 opacity-60 text-xs">{cards.length}</span>
@@ -356,8 +356,8 @@ export default function CardsPage() {
                         onClick={() => setSelectedType(type.id)}
                         className={cn("px-4 py-2 rounded-full text-sm font-medium transition-all whitespace-nowrap border",
                             selectedType === type.id
-                                ? 'bg-foreground text-background border-foreground'
-                                : 'bg-surface text-muted-foreground border-border hover:border-foreground/50'
+                                ? 'bg-accent text-text-primary border-foreground'
+                                : 'bg-surface text-muted-foreground border-border hover:border-accent'
                         )}
                     >
                         {type.name} <span className="ml-1 opacity-60 text-xs">{type.count}</span>

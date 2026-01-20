@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 
 // Interfaces for Layout Items (matching schema roughly)
 interface LayoutItem {
@@ -35,6 +35,9 @@ export default function CardViewer({
         return layout.items || [];
     }, [card.cardType]);
 
+    // State to store resolved card names for Link attributes
+    const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
+
     const attributesMap = useMemo(() => {
         const map = new Map<string, any>();
         if (Array.isArray(card.attributes)) {
@@ -45,60 +48,178 @@ export default function CardViewer({
         return map;
     }, [card.attributes]);
 
+    // Fetch card names for Link/MultiLink attributes
+    useEffect(() => {
+        console.log('[CardViewer] Effect triggered for card attributes:', card.attributes);
+        const linkIds: string[] = [];
+        if (Array.isArray(card.attributes)) {
+            card.attributes.forEach((attr: any) => {
+                if (attr.attrType === 'Link' && attr.value && typeof attr.value === 'string') {
+                    linkIds.push(attr.value);
+                } else if (attr.attrType === 'MultiLink' && Array.isArray(attr.value)) {
+                    attr.value.forEach((id: unknown) => {
+                        if (typeof id === 'string') linkIds.push(id);
+                    });
+                }
+            });
+        }
+        console.log('[CardViewer] Extracted linkIds:', linkIds);
+
+        if (linkIds.length === 0) return;
+
+        // Dedup ids
+        const uniqueIds = Array.from(new Set(linkIds));
+
+        // Fetch names
+        const fetchNames = async () => {
+            try {
+                const params = new URLSearchParams();
+                params.set('storyId', card.storyId);
+                params.set('ids', uniqueIds.join(','));
+
+                console.log('[CardViewer] Fetching names with URL:', `/api/cards?${params.toString()}`);
+
+                const res = await fetch(`/api/cards?${params.toString()}`);
+                if (!res.ok) {
+                    console.error('[CardViewer] Fetch failed:', res.status, res.statusText);
+                    return;
+                }
+
+                const data = await res.json();
+                console.log('[CardViewer] Fetch response data:', data);
+                if (Array.isArray(data)) {
+                    const mapping: Record<string, string> = {};
+                    data.forEach((c: any) => {
+                        mapping[c.id] = c.name;
+                    });
+                    setResolvedNames(prev => ({ ...prev, ...mapping }));
+                }
+            } catch (err) {
+                console.error("Failed to fetch linked card names", err);
+            }
+        };
+
+        fetchNames();
+    }, [card.attributes, card.storyId]);
+
+    // Helper to check if an attribute has a displayable value
+    const hasValue = (attr: any) => {
+        if (!attr || attr.value === undefined || attr.value === null) return false;
+        if (typeof attr.value === 'string' && attr.value.trim() === '') return false;
+        // Check for empty arrays (e.g. empty MultiOption)
+        if (Array.isArray(attr.value) && attr.value.length === 0) return false;
+        return true;
+    };
+
+    const renderResolvedValue = (attr: any) => {
+        if (attr.attrType === 'Link' && typeof attr.value === 'string') {
+            return resolvedNames[attr.value] || attr.value || '-';
+        }
+        if (attr.attrType === 'MultiLink' && Array.isArray(attr.value)) {
+            return attr.value.map((id: string) => resolvedNames[id] || id).join(', ');
+        }
+        return renderAttributeValue(attr);
+    };
+
     const renderLayout = () => {
-        // If no layout, fallback to simple list (legacy or error handling)
-        if (layoutItems.length === 0 && card.attributes && Array.isArray(card.attributes) && card.attributes.length > 0) {
-            return (
-                <div>
-                    <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
-                        <Tag className="w-4 h-4" /> Attributes
-                    </h3>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {card.attributes.map((attr: any) => (
-                            <div key={attr.id} className="p-3 bg-background border border-border rounded-xl flex flex-col">
-                                <span className="text-xs text-muted-foreground font-medium mb-1">
-                                    {attr.name || 'Attribute'}
-                                </span>
-                                <span className="text-sm font-semibold text-foreground truncate">
-                                    {renderAttributeValue(attr)}
-                                </span>
-                            </div>
-                        ))}
+        // Fallback for no layout
+        if (layoutItems.length === 0) {
+            if (card.attributes && Array.isArray(card.attributes) && card.attributes.length > 0) {
+                // Filter only attributes with values
+                const visibleAttributes = card.attributes.filter((attr: any) => hasValue(attr));
+
+                if (visibleAttributes.length === 0) return null;
+
+                return (
+                    <div>
+                        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-4 flex items-center gap-2">
+                            <Tag className="w-4 h-4" /> Attributes
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {visibleAttributes.map((attr: any) => (
+                                <div key={attr.id} className="p-3 bg-background border border-border rounded-xl flex flex-col">
+                                    <span className="text-xs text-muted-foreground font-medium mb-1">
+                                        {attr.name || 'Attribute'}
+                                    </span>
+                                    <span className="text-sm font-semibold text-foreground truncate">
+                                        {renderResolvedValue(attr)}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
                     </div>
-                </div>
-            );
+                );
+            }
+            return null;
         }
 
-        return (
-            <div className="space-y-6">
-                {layoutItems.map((item, index) => {
-                    if (item.type === 'heading') {
-                        return (
-                            <h3 key={index} className="text-sm font-bold text-muted-foreground uppercase tracking-wider border-b border-border pb-2 mt-6 mb-3">
-                                {item.text}
-                            </h3>
-                        );
-                    } else if (item.type === 'attribute' && item.id) {
-                        const attr = attributesMap.get(item.id);
-                        if (!attr) return null; // Attribute not found on card (value not set?)
+        // Process layout items to filter hidden headers
+        const renderedItems: React.ReactNode[] = [];
+        let currentHeading: { item: LayoutItem, index: number } | null = null;
+        let hasAttributeSinceHeading = false;
 
-                        return (
-                            <div key={item.id} className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between py-2 border-b border-border/50 last:border-0 hover:bg-surface-2/50 px-2 rounded-lg transition-colors">
-                                <span className="text-sm font-medium text-muted-foreground">{attr.name}</span>
-                                <span className="text-sm font-semibold text-foreground text-right">{renderAttributeValue(attr)}</span>
-                            </div>
-                        );
+        // Temporary storage for attributes under the current heading
+        let currentSectionAttributes: React.ReactNode[] = [];
+
+        for (let i = 0; i < layoutItems.length; i++) {
+            const item = layoutItems[i];
+            const index = i;
+
+            if (item.type === 'heading') {
+                // formatting: Push previous heading and its attributes IF there were valid attributes
+                if (currentHeading && hasAttributeSinceHeading) {
+                    renderedItems.push(
+                        <h3 key={`h-${currentHeading.index}`} className="text-sm font-bold text-muted-foreground uppercase tracking-wider border-b border-border pb-2 mt-6 mb-3">
+                            {currentHeading.item.text}
+                        </h3>
+                    );
+                    renderedItems.push(...currentSectionAttributes);
+                }
+
+                // Reset for new heading
+                currentHeading = { item, index };
+                hasAttributeSinceHeading = false;
+                currentSectionAttributes = [];
+            } else if (item.type === 'attribute' && item.id) {
+                const attr = attributesMap.get(item.id);
+                if (attr && hasValue(attr)) {
+                    hasAttributeSinceHeading = true;
+                    // Prepare the attribute element but don't add to main list yet
+                    // If there is NO current heading, just add it directly (top level attributes)
+                    const element = (
+                        <div key={item.id} className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between py-2 border-b border-border/50 last:border-0 hover:bg-surface-2/50 px-2 rounded-lg transition-colors">
+                            <span className="text-sm font-medium text-muted-foreground">{attr.name}</span>
+                            <span className="text-sm font-semibold text-foreground text-right">{renderResolvedValue(attr)}</span>
+                        </div>
+                    );
+
+                    if (currentHeading) {
+                        currentSectionAttributes.push(element);
+                    } else {
+                        renderedItems.push(element);
                     }
-                    return null;
-                })}
-            </div>
-        );
+                }
+            }
+        }
+
+        // Flush the last section
+        if (currentHeading && hasAttributeSinceHeading) {
+            renderedItems.push(
+                <h3 key={`h-${currentHeading.index}`} className="text-sm font-bold text-muted-foreground uppercase tracking-wider border-b border-border pb-2 mt-6 mb-3">
+                    {currentHeading.item.text}
+                </h3>
+            );
+            renderedItems.push(...currentSectionAttributes);
+        }
+
+        return <div className="space-y-6">{renderedItems}</div>;
     };
 
     const Content = () => (
-        <div className={cn("flex flex-col md:flex-row h-full bg-surface", !inline && "rounded-2xl shadow-2xl overflow-hidden")}>
-            {/* Left Side: Image */}
-            <div className="w-full md:w-1/2 bg-black/5 dark:bg-black/20 relative group min-h-[300px] md:min-h-full">
+        <div className={cn("flex flex-col md:flex-row bg-surface h-full w-full", !inline && "rounded-2xl shadow-2xl overflow-hidden")}>
+            {/* Left/Top Side: Image (Square) */}
+            {/* Desktop: h-full aspect-square. Mobile: w-full aspect-square */}
+            <div className="shrink-0 relative group bg-black/5 dark:bg-black/20 aspect-square w-full md:w-auto md:h-full">
                 {card.imageUrl ? (
                     <img
                         src={card.imageUrl}
@@ -106,7 +227,7 @@ export default function CardViewer({
                         className="w-full h-full object-cover"
                     />
                 ) : (
-                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center">
+                    <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground p-8 text-center bg-muted/20">
                         <div className="w-24 h-24 rounded-full bg-surface border-4 border-dashed border-border flex items-center justify-center mb-6">
                             <span className="text-4xl font-bold opacity-20">{card.name.charAt(0)}</span>
                         </div>
@@ -127,8 +248,8 @@ export default function CardViewer({
                 </div>
             </div>
 
-            {/* Right Side: Details */}
-            <div className="w-full md:w-1/2 bg-surface flex flex-col h-full overflow-hidden relative border-l border-border">
+            {/* Right/Bottom Side: Details - Flex-1 to take remaining space */}
+            <div className="flex-1 flex flex-col h-full min-h-0 overflow-y-auto relative border-l border-border bg-surface">
                 {/* Header */}
                 <div className="p-6 md:p-8 border-b border-border flex justify-between items-start bg-surface z-10 shrink-0">
                     <div>
@@ -202,8 +323,28 @@ export default function CardViewer({
     }
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 md:p-8 bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="relative w-full max-w-5xl bg-surface rounded-2xl shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
+            {/* 
+               Constraints:
+               - Desktop (md): h-[90vh] | w-auto (fits content based on image + right side) -> Actually user said w-[90vh] OR h-[90vh]
+                 User actually said: "viewer always be at h-[90vh] or w-[90vh] for small screens".
+                 Since we just want the inner content to handle layout, we just constrain the container.
+                 
+                 Implementation:
+                 Desktop: h-[90vh] fixed. Width will be determined by image (90vh) + content (flex-1). 
+                 Wait, if width is unbounded it might stretch. Let's make it reasonable. 
+                 Ideally, if Image is 90vh square, content should probably be something reasonable (e.g. 500px-800px or another 90vh?). 
+                 Let's stick to max-w-7xl for the overall modal width on desktop, but enforce h-[90vh].
+                 
+                 Mobile: w-[90vw] fixed width, max-h-[90vh].
+            */}
+            <div className={cn(
+                "relative bg-surface rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200",
+                // Mobile Styles
+                "w-[90vw] max-h-[90vh] flex flex-col",
+                // Desktop Styles: reset width, fix height
+                "md:w-auto md:h-[90vh] md:max-w-[90vw] md:flex-row"
+            )}>
                 <Content />
             </div>
         </div>

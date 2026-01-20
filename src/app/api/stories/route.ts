@@ -302,7 +302,6 @@ export async function POST(req: Request) {
                 // Initialize default layout
                 const defaultLayout = {
                     items: [
-                        { id: crypto.randomUUID(), type: 'heading', text: 'General' },
                         { id: 'default-attributes', type: 'heading', text: 'Attributes', removable: false }
                     ]
                 };

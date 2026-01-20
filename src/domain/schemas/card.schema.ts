@@ -51,9 +51,21 @@ export const AttributeDefinitionSchema = z.object({
 });
 
 export const AttributeWithValueSchema = z.object({
+    id: z.string().uuid(),
     name: z.string(),
+    attrType: z.enum([
+        'Text',
+        'Number',
+        'UnitNumber',
+        'Option',
+        'MultiOption',
+        'Link',
+        'MultiLink',
+    ]),
     value: z.any(),
+    config: z.record(z.string(), z.any()).nullable(),
 });
+
 
 export const CreateAttributeSchema = z.object({
     name: z.string().min(1).max(50),
@@ -91,9 +103,9 @@ export const CreateCardSchema = z.object({
     name: z.string().min(1).max(100),
     cardTypeId: z.string().uuid(),
     description: z.string().max(2000).optional(),
-    attributes: z.array(AttributeWithValueSchema).nullable(),
+    attributes: z.any().optional(), // specific validation handled in API
     tags: z.array(z.string()).optional(),
-    imageUrl: z.string().url().optional().or(z.literal('')),
+    imageUrl: z.string().url().nullable().optional().or(z.literal('')),
     hidden: z.boolean().optional(),
 });
 

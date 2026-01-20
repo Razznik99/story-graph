@@ -1,20 +1,7 @@
 import prisma from './prisma';
+import { CollaborationRole, hasSufficientRole, PermissionResult } from '@/domain/roles';
 
-export const CollaborationRole = {
-    View: 'View',
-    Comment: 'Comment',
-    Edit: 'Edit',
-    Owner: 'Owner'
-} as const;
 
-export type CollaborationRole = typeof CollaborationRole[keyof typeof CollaborationRole];
-
-export type PermissionResult = {
-    authorized: boolean;
-    role?: CollaborationRole | 'Owner';
-    error?: string;
-    status?: number;
-};
 
 /**
  * Checks if a user has permission to access a story with a specific required role.
@@ -83,17 +70,4 @@ export async function checkStoryPermission(
     }
 
     return { authorized: false, error: 'Insufficient permissions', status: 403 };
-}
-
-function hasSufficientRole(userRole: CollaborationRole, requiredRole: CollaborationRole): boolean {
-    const levels: Record<string, number> = {
-        [CollaborationRole.View]: 1,
-        [CollaborationRole.Comment]: 2,
-        [CollaborationRole.Edit]: 3,
-    };
-
-    const userLevel = levels[userRole] || 0;
-    const requiredLevel = levels[requiredRole] || 0;
-
-    return userLevel >= requiredLevel;
 }

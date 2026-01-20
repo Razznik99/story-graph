@@ -7,7 +7,8 @@ import { z } from 'zod';
 import { CreateCard, UpdateCard, AttributeDefinition, AttributeWithValue } from '@/domain/types';
 import { CreateCardSchema, UpdateCardSchema, AttributeDefinitionSchema as ADS } from '@/domain/schemas/card.schema';
 import { prisma } from '@/lib/prisma';
-import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
+import { checkStoryPermission } from '@/lib/permissions';
+import { CollaborationRole } from '@/domain/roles';
 import { updateStoryTags } from '@/lib/tagUtils';
 
 
@@ -39,9 +40,13 @@ async function processAttributes(
             if (!definition) return null;
             // We know validation passed, so value is safe-ish, but ideally we cast strictly
             return {
-                ...definition,
-                value: attr.value as any,
+                id: definition.id,
+                name: definition.name,
+                attrType: definition.attrType,
+                config: definition.config,
+                value: attr.value,
             };
+
         })
         .filter((a): a is AttributeWithValue => a !== null);
 
@@ -150,7 +155,7 @@ export async function GET(req: NextRequest) {
         let targetStoryId = storyId;
 
         if (!targetStoryId && id) {
-            const card = await prisma.card.findUnique({ where: { id }, select: { storyId: true } });
+            const card = await prisma.card.findUnique({ where: { id }, select: { storyId: true, id: true, name: true } });
             if (!card) return NextResponse.json({ error: 'Card not found' }, { status: 404 });
             targetStoryId = card.storyId;
         }
@@ -164,10 +169,25 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: permission.error }, { status: permission.status || 403 });
         }
 
-        const where: any = { storyId: targetStoryId };
+        const where: any = {};
 
-        if (id) {
-            where.id = id;
+        const ids = searchParams.get('ids');
+        if (ids) {
+            const idList = ids.split(',').filter(Boolean);
+            if (idList.length === 0) {
+                return NextResponse.json([]);
+            }
+
+            where.id = { in: idList };
+        } else {
+            if (!targetStoryId) {
+                return NextResponse.json({ error: 'storyId is required' }, { status: 400 });
+            }
+            where.storyId = targetStoryId;
+
+            if (id) {
+                where.id = id;
+            }
         }
 
         if (hiddenFilter === 'true') where.hidden = true;

@@ -3,8 +3,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
+import { checkStoryPermission } from '@/lib/permissions';
+import { CollaborationRole } from '@/domain/roles';
 import { UpdateCardTypeSchema } from '@/domain/schemas/card.schema';
+
+// GET /api/card-types/[id]
+export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.id)
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+
+        const { id } = await params;
+
+        const cardType = await prisma.cardType.findUnique({
+            where: { id },
+            include: { attributes: true }
+        });
+        // Correction: Schema (Step 52) line 344: `attributes AttributeDefinition[]`
+        // So `include: { attributes: true }` is correct.
+
+        // HOWEVER, in my previous read of `route.ts` (Step 48) for list, I used `include: { attributes: true }`.
+
+        if (!cardType)
+            return NextResponse.json({ error: 'Card type not found' }, { status: 404 });
+
+        const permission = await checkStoryPermission(cardType.storyId, session.user.id, CollaborationRole.View);
+        if (!permission.authorized) {
+            return NextResponse.json({ error: permission.error || 'Forbidden' }, { status: permission.status || 403 });
+        }
+
+        return NextResponse.json(cardType);
+    } catch (error) {
+        console.error('CardType GET error:', error);
+        return NextResponse.json({ error: 'Failed to fetch card type' }, { status: 500 });
+    }
+}
 
 // PUT /api/card-types/[id]
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

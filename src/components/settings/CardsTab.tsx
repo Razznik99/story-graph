@@ -156,7 +156,7 @@ export default function CardsTab() {
                         <ArrowLeft size={16} /> Back to Types
                     </Button>
                 </div>
-                <div className="h-full border rounded-lg overflow-hidden bg-background">
+                <div className="flex flex-col border rounded-lg overflow-y-auto bg-background">
                     <CardTypeEditor
                         cardTypeId={selectedTypeId}
                         onClose={() => setSelectedTypeId(null)}
@@ -214,7 +214,6 @@ export default function CardsTab() {
                             <Card key={type.id} className="hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => setSelectedTypeId(type.id)}>
                                 <CardHeader className="pb-2">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-2 bg-primary/10 rounded-md text-primary"><Layout size={20} /></div>
                                         <CardTitle className="text-base">{type.name}</CardTitle>
                                     </div>
                                     <CardDescription className="line-clamp-2 min-h-[40px]">{type.description || "No description."}</CardDescription>

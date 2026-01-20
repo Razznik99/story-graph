@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { checkStoryPermission, CollaborationRole } from '@/lib/permissions';
+import { checkStoryPermission } from '@/lib/permissions';
+import { CollaborationRole } from '@/domain/roles';
 import { CreateAttributeSchema } from '@/domain/schemas/card.schema';
 
 // GET /api/card-types/attributes?cardTypeId=...
@@ -78,9 +79,16 @@ export async function POST(req: NextRequest) {
             });
 
             const currentLayout = cardType.layout as any || { items: [] };
-            if (!currentLayout.items) currentLayout.items = [
-                { id: crypto.randomUUID(), type: 'heading', text: 'Attributes', removable: false }
-            ];
+            if (!currentLayout.items) currentLayout.items = [];
+
+            // Ensure "Attributes" heading exists
+            const hasAttrHeading = currentLayout.items.some((i: any) => i.type === 'heading' && i.text === 'Attributes');
+            if (!hasAttrHeading) {
+                // If missing, add it. Since it should be the catch-all, we might want it at the start or end?
+                // User requirement: "default layout is { heading; 'Attribute', then list of attributes below it}"
+                // If completely missing, we init it.
+                currentLayout.items.push({ id: crypto.randomUUID(), type: 'heading', text: 'Attributes', removable: false });
+            }
 
             // Append to layout
             currentLayout.items.push({
