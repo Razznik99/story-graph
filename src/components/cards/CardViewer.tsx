@@ -1,10 +1,17 @@
-import { Card, CardType } from '@/domain/types';
-import { X, Edit, Calendar, Tag, Hash, LayoutGrid, List as ListIcon, Maximize2 } from 'lucide-react';
+import { Card, CardType, CardWithVersion } from '@/domain/types';
+import { X, Edit, Calendar, Tag, Hash, LayoutGrid, List as ListIcon, Maximize2, History, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { useMemo, useEffect, useState } from 'react';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select"
 
 // Interfaces for Layout Items (matching schema roughly)
 interface LayoutItem {
@@ -18,17 +25,64 @@ interface Layout {
     items: LayoutItem[];
 }
 
+function deriveVersions(cards: Card[]) {
+    const sorted = [...cards].sort((a, b) => {
+        if (!a.orderKey || !b.orderKey) return 0
+        return Number(a.orderKey) - Number(b.orderKey)
+    })
+
+    return sorted.map((card, index) => ({
+        ...card,
+        __version: index + 1,
+    })) as CardWithVersion[];
+}
+
 export default function CardViewer({
-    card,
+    card: initialCard,
     onClose,
     onEdit,
     inline = false,
 }: {
-    card: Card & { cardType?: CardType };
+    card: CardWithVersion;
     onClose: () => void;
     onEdit: () => void;
     inline?: boolean;
 }) {
+    const [card, setCard] = useState<CardWithVersion>(initialCard);
+    const [versions, setVersions] = useState<CardWithVersion[]>([]);
+
+    useEffect(() => {
+        setCard(initialCard);
+    }, [initialCard]);
+
+    useEffect(() => {
+        if (card.identityId) {
+            fetch(`/api/cards?identityId=${card.identityId}&storyId=${card.storyId}&hidden=all`) // hidden=all implies we want all, though API expects explicit hidden=true/false filters. We need to fetch ALL.
+                // My API implementation: if hiddenFilter is absent, it returns all (both hidden and not hidden) unless default logic applies?
+                // Checking API: 
+                // if (hiddenFilter === 'true') where.hidden = true;
+                // if (hiddenFilter === 'false') where.hidden = false;
+                // so if omitted, it returns all. Good.
+                .then(res => res.json())
+                .then(data => {
+                    if (!Array.isArray(data)) return;
+
+                    const withVersions = deriveVersions(data);
+                    setVersions(withVersions);
+                })
+                .catch(console.error);
+        }
+    }, [card.identityId, card.storyId]);
+
+    const handleVersionChange = (cardId: string) => {
+        const selected = versions.find(v => v.id === cardId);
+        if (selected) {
+            // We need to keep the cardType populated if possible, or assume it's included?
+            // The API returns include: { cardType: true } for list too.
+            setCard(selected);
+        }
+    };
+
     const layoutItems = useMemo(() => {
         if (!card.cardType?.layout) return [];
         const layout = card.cardType.layout as unknown as Layout;
@@ -50,7 +104,6 @@ export default function CardViewer({
 
     // Fetch card names for Link/MultiLink attributes
     useEffect(() => {
-        console.log('[CardViewer] Effect triggered for card attributes:', card.attributes);
         const linkIds: string[] = [];
         if (Array.isArray(card.attributes)) {
             card.attributes.forEach((attr: any) => {
@@ -63,7 +116,6 @@ export default function CardViewer({
                 }
             });
         }
-        console.log('[CardViewer] Extracted linkIds:', linkIds);
 
         if (linkIds.length === 0) return;
 
@@ -77,16 +129,10 @@ export default function CardViewer({
                 params.set('storyId', card.storyId);
                 params.set('ids', uniqueIds.join(','));
 
-                console.log('[CardViewer] Fetching names with URL:', `/api/cards?${params.toString()}`);
-
                 const res = await fetch(`/api/cards?${params.toString()}`);
-                if (!res.ok) {
-                    console.error('[CardViewer] Fetch failed:', res.status, res.statusText);
-                    return;
-                }
+                if (!res.ok) return;
 
                 const data = await res.json();
-                console.log('[CardViewer] Fetch response data:', data);
                 if (Array.isArray(data)) {
                     const mapping: Record<string, string> = {};
                     data.forEach((c: any) => {
@@ -218,7 +264,6 @@ export default function CardViewer({
     const Content = () => (
         <div className={cn("flex flex-col md:flex-row bg-surface h-full w-full", !inline && "rounded-2xl shadow-2xl overflow-hidden")}>
             {/* Left/Top Side: Image (Square) */}
-            {/* Desktop: h-full aspect-square. Mobile: w-full aspect-square */}
             <div className="shrink-0 relative group bg-black/5 dark:bg-black/20 aspect-square w-full md:w-auto md:h-full">
                 {card.imageUrl ? (
                     <img
@@ -236,13 +281,18 @@ export default function CardViewer({
                 )}
 
                 {/* Overlay Actions */}
-                <div className="absolute top-4 left-4 flex gap-2">
+                <div className="absolute top-4 left-4 flex gap-2 flex-wrap">
                     <Badge variant="secondary" className="bg-black/50 backdrop-blur-md text-white border-white/10">
                         {card.cardType?.name || 'Unknown Type'}
                     </Badge>
                     {card.hidden && (
                         <Badge variant="destructive" className="bg-red-500/80 backdrop-blur-md text-white">
-                            Hidden
+                            Hidden (v{card.__version || '?'})
+                        </Badge>
+                    )}
+                    {!card.hidden && (
+                        <Badge variant="default" className="bg-green-500/80 backdrop-blur-md text-white">
+                            Active (v{card.__version || '?'})
                         </Badge>
                     )}
                 </div>
@@ -253,11 +303,31 @@ export default function CardViewer({
                 {/* Header */}
                 <div className="p-6 md:p-8 border-b border-border flex justify-between items-start bg-surface z-10 shrink-0">
                     <div>
-                        <h2 className="text-3xl font-bold text-foreground mb-2 leading-tight">{card.name}</h2>
+                        <div className="flex items-center gap-2 mb-2">
+                            <h2 className="text-3xl font-bold text-foreground leading-tight">{card.name}</h2>
+                            {versions.length > 1 && (
+                                <Select value={card.id} onValueChange={handleVersionChange}>
+                                    <SelectTrigger className="bg-surface border-border">
+                                        <SelectValue placeholder="Version" />
+                                    </SelectTrigger>
+                                    <SelectContent className="bg-surface border-border border-accent z-[101]">
+                                        {versions.map(v => (
+                                            <SelectItem key={v.id} value={v.id}>
+                                                v{v.__version || '?'} {v.hidden ? '' : '(Active)'}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
                         <div className="flex items-center gap-4 text-sm text-muted-foreground">
                             <div className="flex items-center gap-1.5">
                                 <Calendar className="w-4 h-4" />
                                 <span>Updated {new Date(card.updatedAt).toLocaleDateString()}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                                <History className="w-4 h-4" />
+                                <span>Version {card.__version || '?'}</span>
                             </div>
                         </div>
                     </div>
@@ -324,25 +394,9 @@ export default function CardViewer({
 
     return (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-sm animate-in fade-in duration-200">
-            {/* 
-               Constraints:
-               - Desktop (md): h-[90vh] | w-auto (fits content based on image + right side) -> Actually user said w-[90vh] OR h-[90vh]
-                 User actually said: "viewer always be at h-[90vh] or w-[90vh] for small screens".
-                 Since we just want the inner content to handle layout, we just constrain the container.
-                 
-                 Implementation:
-                 Desktop: h-[90vh] fixed. Width will be determined by image (90vh) + content (flex-1). 
-                 Wait, if width is unbounded it might stretch. Let's make it reasonable. 
-                 Ideally, if Image is 90vh square, content should probably be something reasonable (e.g. 500px-800px or another 90vh?). 
-                 Let's stick to max-w-7xl for the overall modal width on desktop, but enforce h-[90vh].
-                 
-                 Mobile: w-[90vw] fixed width, max-h-[90vh].
-            */}
             <div className={cn(
                 "relative bg-surface rounded-2xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200",
-                // Mobile Styles
                 "w-[90vw] max-h-[90vh] flex flex-col",
-                // Desktop Styles: reset width, fix height
                 "md:w-auto md:h-[90vh] md:max-w-[90vw] md:flex-row"
             )}>
                 <Content />

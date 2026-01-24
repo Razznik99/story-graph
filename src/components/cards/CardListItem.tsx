@@ -9,14 +9,14 @@ export default function CardListItem({
     onClick,
     onEdit,
 }: {
-    card: Card & { cardType?: CardType };
+    card: Card & { cardType?: CardType } & { __version?: number };
     onClick: () => void;
     onEdit: (e: React.MouseEvent) => void;
 }) {
     return (
         <div
             onClick={onClick}
-            className="h-36 group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:bg-muted/50 transition-colors cursor-pointer"
+            className="h-36 group flex items-center gap-4 p-4 bg-card border border-border rounded-xl hover:border-accent hover:-translate-y-1 transition-all duration-300 cursor-pointer"
         >
             {/* Thumbnail */}
             <div className="w-28 h-28 rounded-lg bg-muted/50 overflow-hidden flex-shrink-0 border border-border">
@@ -27,7 +27,7 @@ export default function CardListItem({
                         className="w-full h-full object-cover"
                     />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground">
+                    <div className="w-full h-full flex items-center justify-center text-xs text-muted-foreground bg-gradient-to-br from-background to-accent/10">
                         No Img
                     </div>
                 )}
@@ -41,6 +41,9 @@ export default function CardListItem({
                     </h3>
                     <Badge variant="outline" className="text-muted-foreground">
                         {card.cardType?.name || 'Unknown'}
+                    </Badge>
+                    <Badge variant="outline" className="text-muted-foreground">
+                        v{card.__version || '?'}
                     </Badge>
                     {card.hidden && (
                         <Badge variant="destructive" className="bg-red-500/10 text-red-500 hover:bg-red-500/20 border-red-500/20">

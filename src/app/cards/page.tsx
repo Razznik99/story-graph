@@ -1,6 +1,6 @@
 'use client';
 
-import { Card, CardType } from '@/domain/types';
+import { Card, CardType, CardWithVersion } from '@/domain/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useStoryStore } from '@/store/useStoryStore';
@@ -33,12 +33,48 @@ import { Loader } from 'lucide-react';
 type SortOption = 'name' | 'createdAt' | 'updatedAt';
 type SortOrder = 'asc' | 'desc';
 
+// Helper to derive versions for a flat list of cards (grouped by identity)
+function deriveGlobalVersions(cards: (Card & { cardType?: CardType })[]) {
+    // 1. Group by identity
+    const byIdentity = new Map<string, (Card & { cardType?: CardType })[]>();
+    const noIdentity: (Card & { cardType?: CardType })[] = [];
+
+    for (const card of cards) {
+        if (!card.identityId) {
+            noIdentity.push(card);
+            continue;
+        }
+        if (!byIdentity.has(card.identityId)) {
+            byIdentity.set(card.identityId, []);
+        }
+        byIdentity.get(card.identityId)!.push(card);
+    }
+
+    const result: CardWithVersion[] = [];
+
+    // 2. Assign version 1 to cards with no identity (fallback)
+    noIdentity.forEach(c => result.push({ ...c, __version: 1 }));
+
+    // 3. Sort and assign versions per identity
+    for (const group of byIdentity.values()) {
+        const sorted = group.sort((a, b) => {
+            if (!a.orderKey || !b.orderKey) return 0;
+            return Number(a.orderKey) - Number(b.orderKey);
+        });
+        sorted.forEach((card, index) => {
+            result.push({ ...card, __version: index + 1 });
+        });
+    }
+
+    return result;
+}
+
 export default function CardsPage() {
     const router = useRouter();
     const storyId = useStoryStore((state) => state.selectedStoryId);
-    const [cards, setCards] = useState<(Card & { cardType?: CardType })[]>([]);
+    const [cards, setCards] = useState<CardWithVersion[]>([]);
     const [cardTypes, setCardTypes] = useState<CardType[]>([]);
-    const [selectedCard, setSelectedCard] = useState<(Card & { cardType?: CardType }) | null>(null);
+    const [selectedCard, setSelectedCard] = useState<CardWithVersion | null>(null);
     const [isEditorOpen, setIsEditorOpen] = useState(false);
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [loading, setLoading] = useState(true);
@@ -76,7 +112,9 @@ export default function CardsPage() {
             fetch(`/api/card-types?storyId=${storyId}`).then(res => res.ok ? res.json() : [])
         ]).then(([cardsData, typesData]) => {
             const loadedCards = Array.isArray(cardsData) ? cardsData : cardsData.cards || [];
-            setCards(loadedCards);
+            // Apply version derivation
+            const withVersions = deriveGlobalVersions(loadedCards);
+            setCards(withVersions);
             setCardTypes(typesData);
         }).catch(console.error)
             .finally(() => setLoading(false));
@@ -163,7 +201,7 @@ export default function CardsPage() {
         setIsEditorOpen(true);
     };
 
-    const handleEdit = (card: Card) => {
+    const handleEdit = (card: CardWithVersion) => {
         setSelectedCard(card);
         setIsEditorOpen(true);
     };

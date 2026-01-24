@@ -73,7 +73,8 @@ export async function POST(req: NextRequest) {
                 data: {
                     storyId: cardType.storyId,
                     ...attrData,
-                    config: attrData.config ?? undefined,
+                    description: attrData.description ?? null,
+                    config: (attrData.config ?? undefined) as any,
                     cardTypeId,
                 },
             });

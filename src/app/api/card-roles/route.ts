@@ -85,7 +85,7 @@ export async function POST(req: NextRequest) {
             data: {
                 storyId,
                 name,
-                description,
+                description: description ?? null,
                 cardTypeId: cardTypeId || null,
             },
         });

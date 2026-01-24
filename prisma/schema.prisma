@@ -6,12 +6,13 @@
 
 generator client {
   provider = "prisma-client-js"
-  previewFeatures = ["driverAdapters"]
+  output   = "../src/generated/prisma"
 }
 
 datasource db {
   provider = "postgresql"
 }
+
 
 // ======================
 // Enums
@@ -250,6 +251,7 @@ model Story {
   TimelinePath     TimelinePath[]
   NoteNoteLink     NoteNoteLink[]
   Tag              Tag[]
+  identities       Identity[]
 
   @@unique([ownerId, title])
   @@unique([ownerId, abbreviation])
@@ -345,6 +347,7 @@ model CardType {
   layout      Json
   createdAt   DateTime              @default(now())
   cards       Card[]
+  identities  Identity[]
   cardRoles   CardRole[]
 
   @@unique([storyId, name])
@@ -365,10 +368,24 @@ model AttributeDefinition {
   @@unique([cardTypeId, name])
 }
 
+model Identity {
+  id        String   @id @default(uuid())
+  storyId   String
+  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  cardTypeId String
+  cardType   CardType @relation(fields: [cardTypeId], references: [id])
+  cards     Card[]
+  createdAt DateTime @default(now())
+}
+
 model Card {
   id             String          @id @default(uuid())
   storyId        String
   story          Story           @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  
+  identityId     String
+  identity       Identity        @relation(fields: [identityId], references: [id], onDelete: Cascade)
+
   name           String          @db.VarChar(100)
   cardTypeId     String
   cardType       CardType        @relation(fields: [cardTypeId], references: [id])
@@ -376,11 +393,15 @@ model Card {
   attributes     Json? // validated array of { name, value }
   tags           String[] // e.g., ["#main"]
   imageUrl       String? // HTTPS URL
-  version        Int             @default(1)
   hidden         Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  eventCardLinks EventCardLink[] // Added for EventCardLink.card relation
+  eventCardLinks EventCardLink[] 
+  
+  orderKey       Decimal         @db.Decimal(20, 6)
+
+  @@index([storyId])
+  @@index([identityId, orderKey])
 }
 
 model EventType {

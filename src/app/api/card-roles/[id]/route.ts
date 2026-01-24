@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 name: name ?? undefined,
                 description: description ?? undefined,
                 cardTypeId: cardTypeId === null ? null : (cardTypeId ?? undefined), // Handle null explicit removal
-            },
+            } as any,
         });
 
         return NextResponse.json(updated);

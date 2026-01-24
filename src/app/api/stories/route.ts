@@ -284,7 +284,7 @@ export async function POST(req: Request) {
                     coverUrl: validatedData.coverUrl,
                     tags: validatedData.tags || [],
                     ownerId: userId,
-                },
+                } as any,
             });
 
             // 2. Create Default Card Types

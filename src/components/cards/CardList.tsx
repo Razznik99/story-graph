@@ -1,14 +1,14 @@
 import { Card } from '@/domain/types';
 import CardListItem from './CardListItem';
 
-export default function CardList({
+export default function CardList<T extends Card>({
     cards,
     onCardClick,
     onEdit,
 }: {
-    cards: Card[];
-    onCardClick: (card: Card) => void;
-    onEdit: (card: Card) => void;
+    cards: T[];
+    onCardClick: (card: T) => void;
+    onEdit: (card: T) => void;
 }) {
     return (
         <div className="space-y-3">

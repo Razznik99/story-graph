@@ -50,7 +50,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
             data: {
                 name: name ?? undefined, // Only update if provided
                 description: description ?? undefined, // Allow setting to null or undefined
-            },
+            } as any,
         });
 
         return NextResponse.json(updated);

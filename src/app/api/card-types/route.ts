@@ -76,7 +76,8 @@ export async function POST(req: NextRequest) {
 
         const cardType = await prisma.cardType.create({
             data: {
-                ...parsed.data,
+                name: parsed.data.name,
+                description: parsed.data.description ?? null,
                 storyId,
                 layout: defaultLayout
             },

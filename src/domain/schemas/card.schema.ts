@@ -85,6 +85,7 @@ export const UpdateAttributeSchema = z.object({
 
 export const CardSchema = z.object({
     id: z.string().uuid(),
+    identityId: z.string().uuid(),
     storyId: z.string().uuid(),
     name: z.string().min(1).max(100),
     cardTypeId: z.string().uuid(),
@@ -92,7 +93,7 @@ export const CardSchema = z.object({
     attributes: z.array(AttributeWithValueSchema).nullable(),
     tags: z.array(z.string()),
     imageUrl: z.string().url().nullable(),
-    version: z.number().int(),
+    orderKey: z.any(), // Decimal from Prisma
     hidden: z.boolean(),
     createdAt: z.date(),
     updatedAt: z.date(),
@@ -100,6 +101,7 @@ export const CardSchema = z.object({
 
 export const CreateCardSchema = z.object({
     storyId: z.string().uuid(),
+    identityId: z.string().uuid().optional(), // If provided, creates a new version for this identity
     name: z.string().min(1).max(100),
     cardTypeId: z.string().uuid(),
     description: z.string().max(2000).optional(),
@@ -107,6 +109,7 @@ export const CreateCardSchema = z.object({
     tags: z.array(z.string()).optional(),
     imageUrl: z.string().url().nullable().optional().or(z.literal('')),
     hidden: z.boolean().optional(),
+    sourceCardId: z.string().uuid().optional(), // For deriving version order
 });
 
 export const CardRoleSchema = z.object({

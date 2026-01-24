@@ -63,7 +63,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 // User schema ALLOWS optional attrType.
                 attrType: updateData.attrType ?? undefined,
                 config: updateData.config ?? undefined
-            }
+            } as any
         });
 
         return NextResponse.json(updated);

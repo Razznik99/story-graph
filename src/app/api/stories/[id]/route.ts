@@ -60,7 +60,7 @@ export async function PATCH(
 
         const updatedStory = await prisma.story.update({
             where: { id: storyId },
-            data: validatedData,
+            data: validatedData as any,
         });
 
         return NextResponse.json(updatedStory);

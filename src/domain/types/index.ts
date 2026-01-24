@@ -21,6 +21,7 @@ export type CollaborationRequest = z.infer<typeof schemas.CollaborationRequestSc
 export type RequestStatus = CollaborationStatus;
 
 export type Card = z.infer<typeof schemas.CardSchema>;
+export type CardWithVersion = Card & { __version: number; cardType?: CardType; };
 export type CreateCard = z.infer<typeof schemas.CreateCardSchema>;
 export type UpdateCard = z.infer<typeof schemas.UpdateCardSchema>;
 export type CardType = z.infer<typeof schemas.CardTypeSchema>;

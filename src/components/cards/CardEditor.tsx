@@ -4,7 +4,7 @@ import { CollaborationRole } from '@/domain/roles';
 import AttributeField from './AttributeField';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import TagInput from '../TagInput';
-import { X, Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Eye, EyeOff } from 'lucide-react';
+import { X, Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Star, StarOff, GitGraph, GitCompareArrows, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -13,6 +13,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+
 import {
     Dialog,
     DialogContent,
@@ -20,17 +21,36 @@ import {
     DialogTitle,
     DialogFooter,
 } from '@/components/ui/dialog';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 
 type CardTypeOption = { id: string; name: string; prefix: string };
 
 interface CardEditorProps {
     storyId: string;
-    card: (CardType & { cardType?: { id: string;[key: string]: any } }) | null;
+    card: (CardType & { cardType?: { id: string;[key: string]: any } } & { __version?: number }) | null;
     onClose: () => void;
     suggestion?: Suggestion | null;
     onSuggestionAccepted?: () => void;
     inline?: boolean;
     onDelete?: () => void;
+}
+
+// Helper to derive versions client-side
+function deriveVersions(cards: CardType[]) {
+    const sorted = [...cards].sort((a, b) => {
+        if (!a.orderKey || !b.orderKey) return 0;
+        return Number(a.orderKey) - Number(b.orderKey);
+    });
+
+    return sorted.map((card, index) => ({
+        ...card,
+        __version: index + 1,
+    }));
 }
 
 export default function CardEditor({
@@ -58,6 +78,44 @@ export default function CardEditor({
     const [userRole, setUserRole] = useState<CollaborationRole | 'Owner' | null>(null);
     const [showSuggestionModal, setShowSuggestionModal] = useState(false);
     const [suggestionMessage, setSuggestionMessage] = useState('');
+
+    const [versions, setVersions] = useState<(CardType & { __version: number })[]>([]);
+    const [editingId, setEditingId] = useState<string | undefined>(card?.id);
+
+    // Fetch versions if editing
+    useEffect(() => {
+        if (card?.identityId) {
+            fetch(`/api/cards?identityId=${card.identityId}&storyId=${storyId}&hidden=all`)
+                .then(res => res.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        // Derive versions client-side
+                        const derived = deriveVersions(data);
+                        // Sort by version desc for UI (newest first)
+                        setVersions(derived.sort((a, b) => b.__version - a.__version));
+                    }
+                })
+                .catch(console.error);
+        }
+    }, [card?.identityId, storyId]);
+
+    const handleVersionSwitch = (versionId: string) => {
+        const selected = versions.find(v => v.id === versionId);
+        if (selected) {
+            setEditingId(selected.id);
+            setFormData({
+                name: selected.name,
+                cardTypeId: selected.cardTypeId, // Keep type same (invariant) but good to be explicit
+                description: selected.description || '',
+                tags: selected.tags || [],
+                imageUrl: selected.imageUrl || '',
+                hidden: selected.hidden,
+            });
+            if (selected.attributes && Array.isArray(selected.attributes)) {
+                setAttributes(selected.attributes.map((a: any) => ({ attrId: a.id, value: a.value })));
+            }
+        }
+    };
 
 
     useEffect(() => {
@@ -118,6 +176,8 @@ export default function CardEditor({
         }
     };
 
+    const [createNewVersion, setCreateNewVersion] = useState(false);
+
     const handleSubmit = async (e?: React.FormEvent) => {
         if (e) e.preventDefault();
 
@@ -138,11 +198,28 @@ export default function CardEditor({
                 cardTypeId,
                 attributes,
             };
-            if (card?.id) payload.id = card.id;
+
+            // Logic:
+            // 1. If we are creating a brand new card (no card prop) -> POST
+            // 2. If we are editing (card prop exists) AND createNewVersion is true -> POST (with identityId)
+            // 3. If we are editing AND createNewVersion is false -> PUT (with id)
+
+            let method = 'POST';
+            if (card && !createNewVersion && editingId) {
+                method = 'PUT';
+                payload.id = editingId;
+            } else if (card && createNewVersion) {
+                // New version for existing identity
+                payload.identityId = card.identityId;
+                // Don't send 'id', we want a new one.
+                payload.sourceCardId = editingId; // Use current card as source for ordering
+            }
+            // else: Brand new card, no identityId (backend creates one)
+
             if (!payload.imageUrl) payload.imageUrl = null;
 
             const res = await fetch('/api/cards', {
-                method: card ? 'PUT' : 'POST',
+                method,
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(payload),
             });
@@ -151,7 +228,7 @@ export default function CardEditor({
                 if (suggestion && onSuggestionAccepted) {
                     await onSuggestionAccepted();
                 }
-                toast.success(card ? 'Card updated' : 'Card created');
+                toast.success(card && !createNewVersion ? 'Card updated' : 'Card created');
                 onClose();
             } else {
                 const errData = await res.json();
@@ -206,14 +283,32 @@ export default function CardEditor({
         }
     };
 
-    const handleDelete = async () => {
+    const handleDelete = async (mode: 'version' | 'identity' = 'version') => {
         if (!card?.id || !onDelete) return;
-        if (!confirm('Are you sure you want to delete this card?')) return;
+
+        // Logic check: If this is the only version, mode 'version' effectively acts as 'identity'
+        const isSingleVersion = versions.length <= 1;
+        const effectiveMode = isSingleVersion ? 'identity' : mode;
+
+        let confirmationMsg = '';
+        if (effectiveMode === 'identity') {
+            confirmationMsg = isSingleVersion
+                ? 'This is the only version. Deleting it will delete the entire card. Continue?'
+                : 'Are you sure you want to delete ALL versions of this card? This cannot be undone.';
+        } else {
+            confirmationMsg = 'Are you sure you want to delete this specific version?';
+        }
+
+        if (!confirm(confirmationMsg)) return;
 
         try {
-            const res = await fetch(`/api/cards?id=${card.id}`, { method: 'DELETE' });
+            const res = await fetch(`/api/cards?id=${card.id}&mode=${effectiveMode}`, { method: 'DELETE' });
             if (res.ok) {
-                toast.success('Card deleted successfully');
+                toast.success(effectiveMode === 'identity' ? 'Card deleted successfully' : 'Version deleted successfully');
+                // If we deleted the identity (or last version), we call onDelete to close everything.
+                // If we deleted a single version, we might want to stay open on the NEW active version?
+                // But CardEditor logic currently relies on `card` prop. `onDelete` usually refreshes parent.
+                // Let's call onDelete() which likely triggers a refresh/close in parent.
                 onDelete();
                 onClose();
             } else {
@@ -226,6 +321,7 @@ export default function CardEditor({
 
     const renderFormContent = () => (
         <form onSubmit={handleSubmit} className="space-y-6 pt-2">
+            {/* ... error display ... */}
             {error && (
                 <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium flex items-center gap-2">
                     <AlertCircle className="w-5 h-5" />
@@ -248,21 +344,37 @@ export default function CardEditor({
                     />
                 </div>
                 <div className="space-y-2">
-                    <Label className="text-text-secondary">Type</Label>
-                    <Select value={formData.cardTypeId} onValueChange={handleSelectChange}>
-                        <SelectTrigger className="bg-surface border-border">
-                            <SelectValue placeholder="Select type" />
-                        </SelectTrigger>
-                        <SelectContent className="bg-surface border-border border-accent">
-                            {cardTypes.map(type => (
-                                <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
+                    <Label className="text-text-secondary">{card ? 'Version' : 'Type'}</Label>
+                    {card ? (
+                        <Select value={editingId} onValueChange={handleVersionSwitch}>
+                            <SelectTrigger className="bg-surface border-border">
+                                <SelectValue placeholder="Select version" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-surface border-border border-accent z-[150]">
+                                {versions.map(v => (
+                                    <SelectItem key={v.id} value={v.id}>
+                                        v{v.__version} {v.hidden ? '' : '(Active)'}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    ) : (
+                        <Select value={formData.cardTypeId} onValueChange={handleSelectChange}>
+                            <SelectTrigger className="bg-surface border-border">
+                                <SelectValue placeholder="Select type" />
+                            </SelectTrigger>
+                            <SelectContent className="bg-surface border-border border-accent">
+                                {cardTypes.map(type => (
+                                    <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
                 </div>
             </div>
 
             {/* Description */}
+            {/* ... */}
             <div className="space-y-2">
                 <Label htmlFor="description" className="text-text-secondary">Description</Label>
                 <Textarea
@@ -300,11 +412,11 @@ export default function CardEditor({
                 />
             </div>
 
+
             {/* Attributes Section */}
             <div className="space-y-3">
                 <div className="flex justify-between items-center">
                     <Label className="text-text-secondary uppercase tracking-wider text-xs font-semibold">Attributes</Label>
-
                 </div>
                 <div className="space-y-3 rounded-lg bg-surface/50 p-1">
                     {attributes.length === 0 && (
@@ -326,7 +438,6 @@ export default function CardEditor({
                                         }}
                                         storyId={storyId}
                                     />
-                                    {/* Attribute selector removed as we now select before adding */}
                                 </div>
                                 <Button
                                     type="button"
@@ -374,67 +485,119 @@ export default function CardEditor({
                 </div>
             </div>
 
-            {/* Visibility */}
-            <div className="flex items-center gap-4 p-3 bg-surface border border-border rounded-lg">
-
-                <Button
-                    type="button"
-                    variant={formData.hidden ? "secondary" : "outline"}
-                    onClick={() =>
-                        setFormData(prev => ({
-                            ...prev,
-                            hidden: !prev.hidden,
-                        }))
-                    }
-                    className={cn(
-                        "px-3",
-                        formData.hidden &&
-                        "bg-accent/10 text-accent border-accent/20 hover:bg-accent/20"
-                    )}
-                    title="Toggle Hidden"
-                >
-                    {formData.hidden ? (
-                        <EyeOff className="w-5 h-5" />
-                    ) : (
-                        <Eye className="w-5 h-5" />
-                    )}
-                </Button>
-                <div className="space-y-0.5">
-                    <div className="text-sm font-medium">Hidden Card</div>
-                    <div className="text-xs text-muted-foreground">
-                        Hide this card from main lists
+            {/* Visibility & Versioning */}
+            <div className="flex flex-col gap-3">
+                <div className="flex items-center gap-4 p-3 bg-surface border border-border rounded-lg">
+                    <Button
+                        type="button"
+                        variant={!formData.hidden ? "secondary" : "outline"}
+                        disabled={!formData.hidden}
+                        onClick={() =>
+                            setFormData(prev => ({
+                                ...prev,
+                                hidden: false,
+                            }))
+                        }
+                        className="px-3"
+                        title={!formData.hidden ? "Active Version" : "Make Active"}
+                    >
+                        {!formData.hidden ? (
+                            <Star className="w-5 h-5 text-accent fill-accent" />
+                        ) : (
+                            <StarOff className="w-5 h-5" />
+                        )}
+                    </Button>
+                    <div className="space-y-0.5">
+                        <div className="text-sm font-medium">Active Version</div>
+                        <div className="text-xs text-muted-foreground">
+                            {!formData.hidden ? 'This card is currently active.' : 'Click to make this the active version.'}
+                        </div>
                     </div>
                 </div>
+
+                {card && (
+                    <div className="flex items-center gap-4 p-3 bg-surface border border-border rounded-lg">
+                        <Button
+                            type="button"
+                            variant={createNewVersion ? "secondary" : "outline"}
+                            onClick={() => setCreateNewVersion(!createNewVersion)}
+                            className={cn(
+                                "px-3",
+                                createNewVersion &&
+                                "text-accent border-accent/20"
+                            )}
+                            title="Toggle Versioning"
+                        >
+                            {createNewVersion ? (
+                                <GitGraph className="w-5 h-5" />
+                            ) : (
+                                <GitCompareArrows className="w-5 h-5" />
+                            )}
+                        </Button>
+                        <div className="space-y-0.5">
+                            {createNewVersion ? (
+                                <div>
+                                    <div className="text-sm font-medium">Create New Version</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Create a new version (v{(versions.find(v => v.id === card.id)?.__version || 0) + 1}) instead of overwriting.
+                                    </div>
+                                </div>
+                            ) : (
+                                <div>
+                                    <div className="text-sm font-medium">Overwrite</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        Overwrite the current version.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
             </div>
         </form>
     );
 
     const ModalFooter = () => (
-        <DialogFooter className="gap-2 sm:gap-0">
-            {inline && card && onDelete && (
-                <Button
-                    variant="ghost"
-                    onClick={handleDelete}
-                    className="text-red-500 hover:text-red-600 hover:bg-red-500/10 mr-auto"
-                >
-                    Delete
-                </Button>
-            )}
-            {!inline && (
-                <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-surface hover:text-accent">
-                    Cancel
-                </Button>
-            )}
-            <Button
-                onClick={() => handleSubmit()}
-                disabled={isSubmitting}
-                className="bg-accent text-accent-foreground hover:bg-accent/90"
-            >
-                {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                {suggestion ? 'Accept Suggestion' :
-                    userRole === CollaborationRole.Comment ? 'Suggest Change' :
-                        card ? 'Save Changes' : 'Create Card'}
-            </Button>
+        <DialogFooter>
+            <div className='flex w-full justify-between'>
+                <div>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                variant="ghost"
+                                className="text-red-500 hover:text-text-primary hover:bg-red-500"
+                            >
+                                <Trash className='w-5 h-5' />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start" className='bg-background border-red-500'>
+                            <DropdownMenuItem onClick={() => handleDelete('version')} className="text-red-500 focus:text-red-500">
+                                Delete Version
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleDelete('identity')} className="text-red-600 focus:text-red-600 font-semibold">
+                                Delete All Versions
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+                <div className='space-x-2'>
+                    {!inline && (
+                        <Button type="button" variant="ghost" onClick={onClose} className="hover:bg-surface">
+                            Cancel
+                        </Button>
+                    )}
+                    <Button
+                        onClick={() => handleSubmit()}
+                        disabled={isSubmitting}
+                        className="bg-accent text-accent-foreground hover:bg-accent-hover"
+                    >
+                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        {suggestion ? 'Accept Suggestion' :
+                            userRole === CollaborationRole.Comment ? 'Suggest Change' :
+                                (card && !createNewVersion) ? 'Save Changes' : (card && createNewVersion ? 'Create Ver. ' + ((versions.find(v => v.id === card.id)?.__version || 0) + 1) : 'Create Card')}
+                    </Button>
+                </div>
+            </div>
         </DialogFooter>
     );
 

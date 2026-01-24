@@ -1,12 +1,12 @@
 import { Card } from '@/domain/types';
 import CardGridItem from './CardGridItem';
 
-export default function CardGrid({
+export default function CardGrid<T extends Card>({
     cards,
     onCardClick,
 }: {
-    cards: Card[];
-    onCardClick: (card: Card) => void;
+    cards: T[];
+    onCardClick: (card: T) => void;
 }) {
     return (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6">

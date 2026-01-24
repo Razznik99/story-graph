@@ -106,7 +106,7 @@ export async function POST(
                 storyId,
                 userId,
                 role,
-                message,
+                message: message ?? null,
                 status: 'PENDING',
             },
         });

@@ -21,7 +21,7 @@ export const authOptions: NextAuthOptions = {
         }),
         // Passwordless / email sign in
         EmailProvider({
-            from: process.env.MAIL_FROM,
+            from: process.env.MAIL_FROM ?? "noreply@story-graph.com",
             sendVerificationRequest({ identifier, url }) {
                 return sendEmail({
                     to: identifier,

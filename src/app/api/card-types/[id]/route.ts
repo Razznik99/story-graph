@@ -73,7 +73,7 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
                 name: updateData.name ?? undefined,
                 description: updateData.description ?? undefined,
                 layout: updateData.layout ?? undefined,
-            },
+            } as any,
         });
 
         return NextResponse.json(updated);

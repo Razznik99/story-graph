@@ -71,7 +71,7 @@ export async function POST(req: NextRequest) {
         const eventType = await prisma.eventType.create({
             data: {
                 name,
-                description: parsed.data.description,
+                description: parsed.data.description ?? null,
                 storyId,
             },
         });
