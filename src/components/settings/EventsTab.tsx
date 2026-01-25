@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useStoryStore } from "@/store/useStoryStore";
 import { EventType } from "@prisma/client";
-import { Plus, Loader2, Pencil, Trash2, CalendarDays, AlertTriangle } from "lucide-react";
+import { Plus, Loader2, Pencil, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -191,7 +191,7 @@ export default function EventsTab() {
             {loading ? (
                 <div className="flex justify-center p-8"><Loader2 className="animate-spin text-muted-foreground" /></div>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                     {eventTypes.length === 0 && (
                         <div className="col-span-full text-center p-10 border border-dashed rounded-lg text-muted-foreground">
                             No event types found. Create one to get started.
@@ -202,9 +202,6 @@ export default function EventsTab() {
                             <CardHeader className="pb-2">
                                 <div className="flex justify-between items-start">
                                     <div className="flex items-center gap-2">
-                                        <div className="p-2 bg-blue-500/10 rounded-md text-blue-500">
-                                            <CalendarDays size={20} />
-                                        </div>
                                         <CardTitle className="text-base">{type.name}</CardTitle>
                                     </div>
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">

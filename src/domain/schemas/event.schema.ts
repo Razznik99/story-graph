@@ -44,6 +44,7 @@ export const EventSchema = z.object({
 });
 
 export const CreateEventSchema = z.object({
+    storyId: z.string().uuid(),
     title: z.string().min(1).max(100),
     eventTypeId: z.string().uuid(),
     description: z.string().max(2000).optional(),
@@ -56,8 +57,8 @@ export const CreateEventSchema = z.object({
 });
 
 export const UpdateEventSchema = EventSchema.partial().omit({
-    id: true,
-    storyId: true,
     createdAt: true,
     updatedAt: true,
+}).extend({
+    id: z.string().uuid(),
 });

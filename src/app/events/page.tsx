@@ -1,21 +1,19 @@
 'use client';
 
-import { Card, CardType, CardWithVersion } from '@/domain/types';
+import { Event, EventType } from '@/domain/types';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState, useMemo, useRef } from 'react';
 import { useStoryStore } from '@/store/useStoryStore';
-import CardGrid from '@/components/cards/CardGrid';
-import CardList from '@/components/cards/CardList';
-import CardViewer from '@/components/cards/CardViewer';
-import CardEditor from '@/components/cards/CardEditor';
+import EventGrid from '@/components/events/EventGrid';
+import EventList from '@/components/events/EventList';
+import EventViewer from '@/components/events/EventViewer';
+import EventEditor from '@/components/events/EventEditor';
 import {
     LayoutGrid,
     List,
     Plus,
-    ChevronDown,
     Search,
-    EyeOff,
-    Eye,
+    ChevronDown,
     ArrowUpDown
 } from 'lucide-react';
 import {
@@ -27,190 +25,84 @@ import {
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 import { Loader } from 'lucide-react';
 
-type SortOption = 'name' | 'createdAt' | 'updatedAt';
+type SortOption = 'name' | 'createdAt' | 'updatedAt' | 'order';
 type SortOrder = 'asc' | 'desc';
 
-// Helper to derive versions for a flat list of cards (grouped by identity)
-function deriveGlobalVersions(cards: (Card & { cardType?: CardType })[]) {
-    // 1. Group by identity
-    const byIdentity = new Map<string, (Card & { cardType?: CardType })[]>();
-    const noIdentity: (Card & { cardType?: CardType })[] = [];
-
-    for (const card of cards) {
-        if (!card.identityId) {
-            noIdentity.push(card);
-            continue;
-        }
-        if (!byIdentity.has(card.identityId)) {
-            byIdentity.set(card.identityId, []);
-        }
-        byIdentity.get(card.identityId)!.push(card);
-    }
-
-    const result: CardWithVersion[] = [];
-
-    // 2. Assign version 1 to cards with no identity (fallback)
-    noIdentity.forEach(c => result.push({ ...c, __version: 1 }));
-
-    // 3. Sort and assign versions per identity
-    for (const group of byIdentity.values()) {
-        const sorted = group.sort((a, b) => {
-            if (!a.orderKey || !b.orderKey) return 0;
-            return Number(a.orderKey) - Number(b.orderKey);
-        });
-        sorted.forEach((card, index) => {
-            result.push({ ...card, __version: index + 1 });
-        });
-    }
-
-    return result;
-}
-
-export default function CardsPage() {
+export default function EventsPage() {
     const router = useRouter();
     const storyId = useStoryStore((state) => state.selectedStoryId);
-    const [cards, setCards] = useState<CardWithVersion[]>([]);
-    const [cardTypes, setCardTypes] = useState<CardType[]>([]);
-    const [selectedCard, setSelectedCard] = useState<CardWithVersion | null>(null);
-    const [isEditorOpen, setIsEditorOpen] = useState(false);
-    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+    // Data States
+    const [events, setEvents] = useState<(Event & { eventType?: EventType })[]>([]);
+    const [eventTypes, setEventTypes] = useState<EventType[]>([]);
     const [loading, setLoading] = useState(true);
 
-    // Filter States
+    // Filter/Sort States
+    const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedType, setSelectedType] = useState<string>('all');
-    const [showHidden, setShowHidden] = useState(false);
-
-    // Sort States
-    const [sortBy, setSortBy] = useState<SortOption>('updatedAt');
-    const [sortOrder, setSortOrder] = useState<SortOrder>('desc');
+    const [sortBy, setSortBy] = useState<SortOption>('order');
+    const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
     // Dynamic Type Bar States
     const [visibleCount, setVisibleCount] = useState(5);
     const containerRef = useRef<HTMLDivElement>(null);
     const measureRef = useRef<HTMLDivElement>(null);
 
+    // Selection/Modal States
+    const [selectedEvent, setSelectedEvent] = useState<(Event & { eventType?: EventType }) | null>(null);
+    const [isEditorOpen, setIsEditorOpen] = useState(false);
+
     useEffect(() => {
         if (storyId === undefined) return;
-
         if (!storyId) {
             setLoading(false);
             return;
         }
-
         setLoading(true);
-        fetchCards();
+        fetchEvents();
     }, [storyId, router]);
 
-    const fetchCards = () => {
+    const fetchEvents = () => {
         if (!storyId) return;
         Promise.all([
-            fetch(`/api/cards?storyId=${storyId}`).then(res => res.json()),
-            fetch(`/api/card-types?storyId=${storyId}`).then(res => res.ok ? res.json() : [])
-        ]).then(([cardsData, typesData]) => {
-            const loadedCards = Array.isArray(cardsData) ? cardsData : cardsData.cards || [];
-            // Apply version derivation
-            const withVersions = deriveGlobalVersions(loadedCards);
-            setCards(withVersions);
-            setCardTypes(typesData);
+            fetch(`/api/events?storyId=${storyId}`).then(res => res.json()),
+            fetch(`/api/event-types?storyId=${storyId}`).then(res => res.ok ? res.json() : [])
+        ]).then(([eventsData, typesData]) => {
+            if (Array.isArray(eventsData)) {
+                setEvents(eventsData);
+            } else {
+                setEvents([]);
+            }
+            if (Array.isArray(typesData)) {
+                setEventTypes(typesData);
+            }
         }).catch(console.error)
             .finally(() => setLoading(false));
     };
 
-    // Derived Data: Card Types with Counts
+    // Derived Data: Event Types with Counts
     const typeStats = useMemo(() => {
         const stats = new Map<string, { id: string; name: string; count: number }>();
 
-        // Initialize stats with all known card types, setting their counts to 0
-        cardTypes.forEach(type => {
+        // Initialize stats with all known event types
+        eventTypes.forEach(type => {
             stats.set(type.id, { id: type.id, name: type.name, count: 0 });
         });
 
-        // Then, iterate through actual cards to update counts
-        cards.forEach(card => {
-            if (card.cardType?.id && stats.has(card.cardType.id)) {
-                stats.get(card.cardType.id)!.count++;
-            } else if (card.cardType && !stats.has(card.cardType.id)) {
-                stats.set(card.cardType.id, { id: card.cardType.id, name: card.cardType.name, count: 1 });
+        // Update counts
+        events.forEach(event => {
+            if (event.eventType?.id && stats.has(event.eventType.id)) {
+                stats.get(event.eventType.id)!.count++;
+            } else if (event.eventType && !stats.has(event.eventType.id)) {
+                stats.set(event.eventType.id, { id: event.eventType.id, name: event.eventType.name, count: 1 });
             }
         });
 
         return Array.from(stats.values()).sort((a, b) => b.count - a.count);
-    }, [cards, cardTypes]);
-
-    // Filter and Sort Logic
-    const filteredAndSortedCards = useMemo(() => {
-        let result = [...cards];
-
-        // 1. Filter by Hidden
-        if (!showHidden) {
-            result = result.filter(c => !c.hidden);
-        }
-
-        // 2. Filter by Type
-        if (selectedType !== 'all') {
-            result = result.filter(c => c.cardType?.id === selectedType);
-        }
-
-        // 3. Filter by Search (Name, Tags, Description, Attributes)
-        if (searchTerm) {
-            const lowerTerm = searchTerm.toLowerCase();
-            result = result.filter(c =>
-                c.name.toLowerCase().includes(lowerTerm) ||
-                c.description?.toLowerCase().includes(lowerTerm) ||
-                c.tags?.some(t => t.toLowerCase().includes(lowerTerm)) ||
-                c.attributes?.some((a: any) => {
-                    if (typeof a.value === 'string') return a.value.toLowerCase().includes(lowerTerm);
-                    if (typeof a.value === 'number') return a.value.toString().includes(lowerTerm);
-                    if (Array.isArray(a.value)) return a.value.some((v: any) => String(v).toLowerCase().includes(lowerTerm));
-                    if (typeof a.value === 'object' && a.value !== null) {
-                        const val = (a.value as any).value;
-                        const unit = (a.value as any).unit;
-                        return String(val).includes(lowerTerm) || String(unit).toLowerCase().includes(lowerTerm);
-                    }
-                    return false;
-                })
-            );
-        }
-
-        // 4. Sort
-        result.sort((a, b) => {
-            let cmp = 0;
-            switch (sortBy) {
-                case 'name':
-                    cmp = a.name.localeCompare(b.name);
-                    break;
-                case 'createdAt':
-                    cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
-                    break;
-                case 'updatedAt':
-                    cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
-                    break;
-            }
-            return sortOrder === 'asc' ? cmp : -cmp;
-        });
-
-        return result;
-    }, [cards, showHidden, selectedType, searchTerm, sortBy, sortOrder]);
-
-    const handleCreate = () => {
-        setSelectedCard(null);
-        setIsEditorOpen(true);
-    };
-
-    const handleEdit = (card: CardWithVersion) => {
-        setSelectedCard(card);
-        setIsEditorOpen(true);
-    };
-
-    const handleEditorClose = () => {
-        setIsEditorOpen(false);
-        setSelectedCard(null);
-        fetchCards();
-    };
+    }, [events, eventTypes]);
 
     // Dynamic Type Bar Measurement
     useEffect(() => {
@@ -225,9 +117,7 @@ export default function CardsPage() {
                 return;
             }
 
-            if (children.length === 0) return;
-
-            const gap = 8; // gap-2 is 0.5rem = 8px
+            const gap = 8;
             let currentWidth = 0;
 
             const firstChild = children[0];
@@ -235,8 +125,8 @@ export default function CardsPage() {
 
             if (!firstChild || !lastChild) return;
 
-            const allCardsWidth = firstChild.offsetWidth;
-            currentWidth += allCardsWidth;
+            const allEventsWidth = firstChild.offsetWidth;
+            currentWidth += allEventsWidth;
 
             const moreBtnWidth = lastChild.offsetWidth;
 
@@ -277,12 +167,69 @@ export default function CardsPage() {
         return () => window.removeEventListener('resize', calculateVisible);
     }, [typeStats]);
 
-    // Type Bar Logic
     const visibleTypes = typeStats.slice(0, visibleCount);
     const hiddenTypes = typeStats.slice(visibleCount);
 
-    if (!storyId) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Select a story to view cards</div>;
-    if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground"><Loader className="animate-spin mr-2" /> Loading Cards...</div>;
+    const filteredAndSortedEvents = useMemo(() => {
+        let result = [...events];
+
+        // Filter by Type
+        if (selectedType !== 'all') {
+            result = result.filter(e => e.eventType?.id === selectedType);
+        }
+
+        // Filter by Search
+        if (searchTerm) {
+            const lowerTerm = searchTerm.toLowerCase();
+            result = result.filter(e =>
+                e.title.toLowerCase().includes(lowerTerm) ||
+                e.description?.toLowerCase().includes(lowerTerm) ||
+                e.tags?.some(t => t.toLowerCase().includes(lowerTerm)) ||
+                e.eventType?.name.toLowerCase().includes(lowerTerm)
+            );
+        }
+
+        // Sort
+        result.sort((a, b) => {
+            let cmp = 0;
+            switch (sortBy) {
+                case 'name':
+                    cmp = a.title.localeCompare(b.title);
+                    break;
+                case 'createdAt':
+                    cmp = new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+                    break;
+                case 'updatedAt':
+                    cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
+                    break;
+                case 'order':
+                    cmp = a.order - b.order;
+                    break;
+            }
+            return sortOrder === 'asc' ? cmp : -cmp;
+        });
+
+        return result;
+    }, [events, searchTerm, sortBy, sortOrder, selectedType]);
+
+    const handleCreate = () => {
+        setSelectedEvent(null);
+        setIsEditorOpen(true);
+    };
+
+    const handleEdit = (event: Event & { eventType?: EventType }) => {
+        setSelectedEvent(event);
+        setIsEditorOpen(true);
+    };
+
+    const handleEditorClose = () => {
+        setIsEditorOpen(false);
+        setSelectedEvent(null);
+        fetchEvents();
+    };
+
+    if (!storyId) return <div className="min-h-screen flex items-center justify-center text-muted-foreground">Select a story to view events</div>;
+    if (loading) return <div className="min-h-screen flex items-center justify-center text-muted-foreground"><Loader className="animate-spin mr-2" /> Loading Events...</div>;
 
     return (
         <div className="min-h-screen bg-background p-6 md:p-8">
@@ -292,7 +239,7 @@ export default function CardsPage() {
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground group-focus-within:text-accent transition-colors" />
                     <Input
                         type="text"
-                        placeholder="Search cards..."
+                        placeholder="Search events..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                         className="pl-10 bg-surface border-border focus:ring-accent"
@@ -300,29 +247,29 @@ export default function CardsPage() {
                 </div>
 
                 <div className="flex items-center gap-3 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
-                    {/* Sort Dropdown */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="outline" className="justify-between min-w-[180px]">
+                            <Button variant="outline" className="justify-between min-w-[160px]">
                                 <span className="flex items-center gap-2">
                                     <span className="text-muted-foreground">Sort:</span>
                                     <span className="text-foreground font-medium">
-                                        {sortBy === 'name' && (sortOrder === 'asc' ? 'Name (A-Z)' : 'Name (Z-A)')}
-                                        {sortBy === 'createdAt' && (sortOrder === 'desc' ? 'Newest Created' : 'Oldest Created')}
-                                        {sortBy === 'updatedAt' && (sortOrder === 'desc' ? 'Recently Updated' : 'Oldest Updated')}
+                                        {sortBy === 'name' && 'Name'}
+                                        {sortBy === 'createdAt' && 'Created'}
+                                        {sortBy === 'updatedAt' && 'Updated'}
+                                        {sortBy === 'order' && 'Order'}
                                     </span>
                                 </span>
                                 <ArrowUpDown className="w-4 h-4 ml-2 text-muted-foreground" />
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-56 bg-background border-border border-accent z-[150]" align="end">
+                        <DropdownMenuContent className="w-56 bg-surface border-border border-accent z-[150]" align="end">
                             {[
+                                { label: 'Order', sort: 'order', order: 'asc' },
                                 { label: 'Name (A-Z)', sort: 'name', order: 'asc' },
                                 { label: 'Name (Z-A)', sort: 'name', order: 'desc' },
                                 { label: 'Newest Created', sort: 'createdAt', order: 'desc' },
                                 { label: 'Oldest Created', sort: 'createdAt', order: 'asc' },
                                 { label: 'Recently Updated', sort: 'updatedAt', order: 'desc' },
-                                { label: 'Oldest Updated', sort: 'updatedAt', order: 'asc' },
                             ].map((opt: any) => (
                                 <DropdownMenuItem
                                     key={opt.label}
@@ -335,7 +282,6 @@ export default function CardsPage() {
                         </DropdownMenuContent>
                     </DropdownMenu>
 
-                    {/* View Toggle */}
                     <div className="flex bg-surface border border-border rounded-xl p-1">
                         <button
                             onClick={() => setViewMode('grid')}
@@ -351,31 +297,20 @@ export default function CardsPage() {
                         </button>
                     </div>
 
-                    {/* Hidden Toggle */}
-                    <Button
-                        variant={showHidden ? 'secondary' : 'outline'}
-                        onClick={() => setShowHidden(!showHidden)}
-                        className={cn("px-3", showHidden && "bg-accent/10 text-accent border-accent/20 hover:bg-accent/20")}
-                        title="Toggle Hidden Cards"
-                    >
-                        {showHidden ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
-                    </Button>
-
-                    {/* Create Button */}
                     <Button onClick={handleCreate} className="bg-accent text-accent-foreground hover:bg-accent/90 shadow-lg">
                         <Plus className="w-5 h-5 mr-2" />
-                        <span className="hidden sm:inline">New Card</span>
+                        <span className="hidden sm:inline">New Event</span>
                     </Button>
                 </div>
             </div>
 
-            {/* Hidden Measurement Container - Keep invisible but present for calc */}
+            {/* Hidden Measurement Container */}
             <div
                 ref={measureRef}
                 className="fixed top-0 left-0 flex items-center gap-2 invisible pointer-events-none"
                 aria-hidden="true"
             >
-                <div className="px-4 py-2 border">All Cards {cards.length}</div>
+                <div className="px-4 py-2 border">All Events {events.length}</div>
                 {typeStats.map(type => (
                     <div key={type.id} className="px-4 py-2 border">{type.name} {type.count}</div>
                 ))}
@@ -395,7 +330,7 @@ export default function CardsPage() {
                             : 'bg-surface text-muted-foreground border-border hover:border-accent'
                     )}
                 >
-                    All Cards <span className="ml-1 opacity-60 text-xs">{cards.length}</span>
+                    All Events <span className="ml-1 opacity-60 text-xs">{events.length}</span>
                 </button>
 
                 {visibleTypes.map(type => (
@@ -419,7 +354,7 @@ export default function CardsPage() {
                                 More <ChevronDown className="w-3 h-3" />
                             </button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent className="w-48 bg-background border-border border-accent z-[150]" align="start">
+                        <DropdownMenuContent className="w-48 bg-surface border-border border-accent z-[150]" align="start">
                             {hiddenTypes.map(type => (
                                 <DropdownMenuItem
                                     key={type.id}
@@ -436,18 +371,18 @@ export default function CardsPage() {
             </div>
 
             {/* Content Area */}
-            {filteredAndSortedCards.length === 0 ? (
+            {filteredAndSortedEvents.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-20 text-center">
                     <div className="w-20 h-20 bg-surface rounded-full flex items-center justify-center mb-4 shadow-sm border border-border">
                         <Search className="w-8 h-8 text-muted-foreground" />
                     </div>
-                    <h3 className="text-xl font-bold text-foreground mb-2">No cards found</h3>
+                    <h3 className="text-xl font-bold text-foreground mb-2">No events found</h3>
                     <p className="text-muted-foreground max-w-md">
-                        Try adjusting your filters or search terms, or create a new card to get started.
+                        Try adjusting your filters or search terms, or create a new event to get started.
                     </p>
                     <Button
                         variant="link"
-                        onClick={() => { setSearchTerm(''); setSelectedType('all'); setShowHidden(false); }}
+                        onClick={() => { setSearchTerm(''); setSelectedType('all'); }}
                         className="mt-6 text-accent"
                     >
                         Clear all filters
@@ -456,35 +391,35 @@ export default function CardsPage() {
             ) : (
                 <>
                     {viewMode === 'grid' ? (
-                        <CardGrid
-                            cards={filteredAndSortedCards}
-                            onCardClick={setSelectedCard}
+                        <EventGrid
+                            events={filteredAndSortedEvents}
+                            onEventClick={setSelectedEvent}
                         />
                     ) : (
-                        <CardList
-                            cards={filteredAndSortedCards}
-                            onCardClick={setSelectedCard}
+                        <EventList
+                            events={filteredAndSortedEvents}
+                            onEventClick={setSelectedEvent}
                             onEdit={handleEdit}
                         />
                     )}
                 </>
             )}
 
-            {/* Card Editor Modal */}
+            {/* Modals */}
             {isEditorOpen && (
-                <CardEditor
-                    card={selectedCard}
-                    onClose={handleEditorClose}
+                <EventEditor
                     storyId={storyId}
+                    event={selectedEvent}
+                    onClose={handleEditorClose}
+                    onDelete={handleEditorClose}
                 />
             )}
 
-            {/* Card Viewer Modal */}
-            {selectedCard && !isEditorOpen && (
-                <CardViewer
-                    card={selectedCard}
-                    onClose={() => setSelectedCard(null)}
-                    onEdit={() => handleEdit(selectedCard)}
+            {selectedEvent && !isEditorOpen && (
+                <EventViewer
+                    event={selectedEvent}
+                    onClose={() => setSelectedEvent(null)}
+                    onEdit={() => handleEdit(selectedEvent)}
                 />
             )}
         </div>

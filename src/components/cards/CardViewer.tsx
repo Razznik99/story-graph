@@ -1,5 +1,5 @@
-import { Card, CardType, CardWithVersion } from '@/domain/types';
-import { X, Edit, Calendar, Tag, Hash, LayoutGrid, List as ListIcon, Maximize2, History, CheckCircle } from 'lucide-react';
+import { Card, CardWithVersion, AttributeWithValue } from '@/domain/types';
+import { X, Edit, Calendar, Tag, Hash, History } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -93,9 +93,9 @@ export default function CardViewer({
     const [resolvedNames, setResolvedNames] = useState<Record<string, string>>({});
 
     const attributesMap = useMemo(() => {
-        const map = new Map<string, any>();
+        const map = new Map<string, AttributeWithValue>();
         if (Array.isArray(card.attributes)) {
-            card.attributes.forEach((attr: any) => {
+            card.attributes.forEach((attr: AttributeWithValue) => {
                 if (attr.id) map.set(attr.id, attr);
             });
         }
@@ -106,7 +106,7 @@ export default function CardViewer({
     useEffect(() => {
         const linkIds: string[] = [];
         if (Array.isArray(card.attributes)) {
-            card.attributes.forEach((attr: any) => {
+            card.attributes.forEach((attr: AttributeWithValue) => {
                 if (attr.attrType === 'Link' && attr.value && typeof attr.value === 'string') {
                     linkIds.push(attr.value);
                 } else if (attr.attrType === 'MultiLink' && Array.isArray(attr.value)) {
@@ -135,7 +135,7 @@ export default function CardViewer({
                 const data = await res.json();
                 if (Array.isArray(data)) {
                     const mapping: Record<string, string> = {};
-                    data.forEach((c: any) => {
+                    data.forEach((c: Card) => {
                         mapping[c.id] = c.name;
                     });
                     setResolvedNames(prev => ({ ...prev, ...mapping }));
@@ -149,7 +149,7 @@ export default function CardViewer({
     }, [card.attributes, card.storyId]);
 
     // Helper to check if an attribute has a displayable value
-    const hasValue = (attr: any) => {
+    const hasValue = (attr: AttributeWithValue | undefined) => {
         if (!attr || attr.value === undefined || attr.value === null) return false;
         if (typeof attr.value === 'string' && attr.value.trim() === '') return false;
         // Check for empty arrays (e.g. empty MultiOption)
@@ -157,7 +157,7 @@ export default function CardViewer({
         return true;
     };
 
-    const renderResolvedValue = (attr: any) => {
+    const renderResolvedValue = (attr: AttributeWithValue) => {
         if (attr.attrType === 'Link' && typeof attr.value === 'string') {
             return resolvedNames[attr.value] || attr.value || '-';
         }
@@ -172,7 +172,7 @@ export default function CardViewer({
         if (layoutItems.length === 0) {
             if (card.attributes && Array.isArray(card.attributes) && card.attributes.length > 0) {
                 // Filter only attributes with values
-                const visibleAttributes = card.attributes.filter((attr: any) => hasValue(attr));
+                const visibleAttributes = card.attributes.filter((attr: AttributeWithValue) => hasValue(attr));
 
                 if (visibleAttributes.length === 0) return null;
 
@@ -182,7 +182,7 @@ export default function CardViewer({
                             <Tag className="w-4 h-4" /> Attributes
                         </h3>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                            {visibleAttributes.map((attr: any) => (
+                            {visibleAttributes.map((attr: AttributeWithValue) => (
                                 <div key={attr.id} className="p-3 bg-background border border-border rounded-xl flex flex-col">
                                     <span className="text-xs text-muted-foreground font-medium mb-1">
                                         {attr.name || 'Attribute'}
@@ -210,6 +210,8 @@ export default function CardViewer({
         for (let i = 0; i < layoutItems.length; i++) {
             const item = layoutItems[i];
             const index = i;
+
+            if (!item) continue;
 
             if (item.type === 'heading') {
                 // formatting: Push previous heading and its attributes IF there were valid attributes
@@ -405,7 +407,7 @@ export default function CardViewer({
     );
 }
 
-function renderAttributeValue(attr: any): string {
+function renderAttributeValue(attr: AttributeWithValue | undefined | null): string {
     if (!attr || attr.value === undefined || attr.value === null) return '-';
 
     // Handle different value types from schema

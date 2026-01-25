@@ -1,13 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Card as CardType, AttributeDefinition, Suggestion } from '@/domain/types';
+import { Card as CardType, AttributeDefinition, Suggestion, AttributeWithValue } from '@/domain/types';
 import { CollaborationRole } from '@/domain/roles';
 import AttributeField from './AttributeField';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import TagInput from '../TagInput';
-import { X, Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Star, StarOff, GitGraph, GitCompareArrows, Trash } from 'lucide-react';
+import { Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Star, StarOff, GitGraph, GitCompareArrows, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
@@ -32,7 +31,7 @@ type CardTypeOption = { id: string; name: string; prefix: string };
 
 interface CardEditorProps {
     storyId: string;
-    card: (CardType & { cardType?: { id: string;[key: string]: any } } & { __version?: number }) | null;
+    card: (CardType & { cardType?: { id: string;[key: string]: unknown } } & { __version?: number }) | null;
     onClose: () => void;
     suggestion?: Suggestion | null;
     onSuggestionAccepted?: () => void;
@@ -112,7 +111,7 @@ export default function CardEditor({
                 hidden: selected.hidden,
             });
             if (selected.attributes && Array.isArray(selected.attributes)) {
-                setAttributes(selected.attributes.map((a: any) => ({ attrId: a.id, value: a.value })));
+                setAttributes(selected.attributes.map((a: AttributeWithValue) => ({ attrId: a.id, value: a.value })));
             }
         }
     };
@@ -146,7 +145,7 @@ export default function CardEditor({
                 hidden: card.hidden,
             });
             if (card.attributes && Array.isArray(card.attributes)) {
-                setAttributes(card.attributes.map((a: any) => ({ attrId: a.id, value: a.value })));
+                setAttributes(card.attributes.map((a: AttributeWithValue) => ({ attrId: a.id, value: a.value })));
             }
         }
     }, [storyId, card]);
@@ -275,7 +274,7 @@ export default function CardEditor({
                 const errData = await res.json();
                 setError(errData.error || 'Failed to send suggestion');
             }
-        } catch (err) {
+        } catch {
             setError('Network error');
         } finally {
             setIsSubmitting(false);
@@ -346,7 +345,7 @@ export default function CardEditor({
                 <div className="space-y-2">
                     <Label className="text-text-secondary">{card ? 'Version' : 'Type'}</Label>
                     {card ? (
-                        <Select value={editingId} onValueChange={handleVersionSwitch}>
+                        <Select value={editingId ?? ''} onValueChange={handleVersionSwitch}>
                             <SelectTrigger className="bg-surface border-border">
                                 <SelectValue placeholder="Select version" />
                             </SelectTrigger>
@@ -433,8 +432,11 @@ export default function CardEditor({
                                         value={attr.value}
                                         onChange={newVal => {
                                             const updated = [...attributes];
-                                            updated[index] = { ...updated[index], value: newVal };
-                                            setAttributes(updated);
+                                            const item = updated[index];
+                                            if (item) {
+                                                updated[index] = { attrId: item.attrId, value: newVal };
+                                                setAttributes(updated);
+                                            }
                                         }}
                                         storyId={storyId}
                                     />

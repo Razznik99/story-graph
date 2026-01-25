@@ -209,7 +209,7 @@ export default function CardsTab() {
                 </div>
 
                 {loading ? <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div> : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-4">
                         {cardTypes.map(type => (
                             <Card key={type.id} className="hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => setSelectedTypeId(type.id)}>
                                 <CardHeader className="pb-2">

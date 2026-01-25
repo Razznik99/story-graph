@@ -43,7 +43,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Tab Content */}
-            <div className="max-w-3xl">
+            <div>
                 {activeTab === 'story' && (
                     <StoryTab />
                 )}
