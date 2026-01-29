@@ -27,7 +27,9 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { Loader } from 'lucide-react';
 
-type SortOption = 'name' | 'createdAt' | 'updatedAt' | 'order';
+import { listTLNodes, type TLNode } from '@/lib/timeline-api';
+
+type SortOption = 'name' | 'createdAt' | 'updatedAt' | 'timeline';
 type SortOrder = 'asc' | 'desc';
 
 export default function EventsPage() {
@@ -37,13 +39,14 @@ export default function EventsPage() {
     // Data States
     const [events, setEvents] = useState<(Event & { eventType?: EventType })[]>([]);
     const [eventTypes, setEventTypes] = useState<EventType[]>([]);
+    const [timelineNodes, setTimelineNodes] = useState<TLNode[]>([]);
     const [loading, setLoading] = useState(true);
 
     // Filter/Sort States
     const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedType, setSelectedType] = useState<string>('all');
-    const [sortBy, setSortBy] = useState<SortOption>('order');
+    const [sortBy, setSortBy] = useState<SortOption>('timeline');
     const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
 
     // Dynamic Type Bar States
@@ -69,8 +72,9 @@ export default function EventsPage() {
         if (!storyId) return;
         Promise.all([
             fetch(`/api/events?storyId=${storyId}`).then(res => res.json()),
-            fetch(`/api/event-types?storyId=${storyId}`).then(res => res.ok ? res.json() : [])
-        ]).then(([eventsData, typesData]) => {
+            fetch(`/api/event-types?storyId=${storyId}`).then(res => res.ok ? res.json() : []),
+            listTLNodes(storyId).catch(() => [])
+        ]).then(([eventsData, typesData, nodesData]) => {
             if (Array.isArray(eventsData)) {
                 setEvents(eventsData);
             } else {
@@ -78,6 +82,9 @@ export default function EventsPage() {
             }
             if (Array.isArray(typesData)) {
                 setEventTypes(typesData);
+            }
+            if (Array.isArray(nodesData)) {
+                setTimelineNodes(nodesData);
             }
         }).catch(console.error)
             .finally(() => setLoading(false));
@@ -189,6 +196,13 @@ export default function EventsPage() {
             );
         }
 
+        // Build Map for Node Positions
+        // Map<nodeId, position[]>
+        const nodePosMap = new Map<string, number[]>();
+        timelineNodes.forEach(n => {
+            nodePosMap.set(n.id, n.position || []);
+        });
+
         // Sort
         result.sort((a, b) => {
             let cmp = 0;
@@ -202,15 +216,46 @@ export default function EventsPage() {
                 case 'updatedAt':
                     cmp = new Date(a.updatedAt).getTime() - new Date(b.updatedAt).getTime();
                     break;
-                case 'order':
-                    cmp = a.order - b.order;
+                case 'timeline':
+                    // Compare positions
+                    // If event has no timelineId, it goes to the end (or specific bucket)
+                    const posA = a.timelineId ? nodePosMap.get(a.timelineId) : null;
+                    const posB = b.timelineId ? nodePosMap.get(b.timelineId) : null;
+
+                    if (!posA && !posB) {
+                        // Both unplaced: sort by order or something else
+                        cmp = (a.order ?? 0) - (b.order ?? 0);
+                    } else if (!posA) {
+                        cmp = 1; // A is unplaced -> after B
+                    } else if (!posB) {
+                        cmp = -1; // B is unplaced -> A before B
+                    } else {
+                        // Both placed, compare position arrays
+                        const len = Math.min(posA.length, posB.length);
+                        for (let i = 0; i < len; i++) {
+                            if (posA[i] !== posB[i]) {
+                                cmp = (posA[i] ?? 0) - (posB[i] ?? 0);
+                                break;
+                            }
+                        }
+                        if (cmp === 0) {
+                            // Arrays partially equal
+                            if (posA.length !== posB.length) {
+                                // Shorter array (parent) comes first
+                                cmp = posA.length - posB.length;
+                            } else {
+                                // Same node, compare event order
+                                cmp = (a.order ?? 0) - (b.order ?? 0);
+                            }
+                        }
+                    }
                     break;
             }
             return sortOrder === 'asc' ? cmp : -cmp;
         });
 
         return result;
-    }, [events, searchTerm, sortBy, sortOrder, selectedType]);
+    }, [events, searchTerm, sortBy, sortOrder, selectedType, timelineNodes]);
 
     const handleCreate = () => {
         setSelectedEvent(null);
@@ -256,7 +301,7 @@ export default function EventsPage() {
                                         {sortBy === 'name' && 'Name'}
                                         {sortBy === 'createdAt' && 'Created'}
                                         {sortBy === 'updatedAt' && 'Updated'}
-                                        {sortBy === 'order' && 'Order'}
+                                        {sortBy === 'timeline' && 'Timeline Order'}
                                     </span>
                                 </span>
                                 <ArrowUpDown className="w-4 h-4 ml-2 text-muted-foreground" />
@@ -264,7 +309,8 @@ export default function EventsPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-56 bg-surface border-border border-accent z-[150]" align="end">
                             {[
-                                { label: 'Order', sort: 'order', order: 'asc' },
+                                { label: 'Timeline Order (asc)', sort: 'timeline', order: 'asc' },
+                                { label: 'Timeline Reverse (desc)', sort: 'timeline', order: 'desc' },
                                 { label: 'Name (A-Z)', sort: 'name', order: 'asc' },
                                 { label: 'Name (Z-A)', sort: 'name', order: 'desc' },
                                 { label: 'Newest Created', sort: 'createdAt', order: 'desc' },
@@ -420,6 +466,10 @@ export default function EventsPage() {
                     event={selectedEvent}
                     onClose={() => setSelectedEvent(null)}
                     onEdit={() => handleEdit(selectedEvent)}
+                    onOpenEvent={(eventId) => {
+                        const target = events.find(e => e.id === eventId);
+                        if (target) setSelectedEvent(target);
+                    }}
                 />
             )}
         </div>

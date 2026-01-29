@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
-import { Lock, Users, Pencil, Trash2, LogIn, KeySquare } from 'lucide-react';
+import { Lock, Users, Pencil, Trash2, Loader2, LogIn, KeySquare } from 'lucide-react';
 import { useStoryStore } from '@/store/useStoryStore';
 import RequestAccessModal from './RequestAccessModal';
 
@@ -26,6 +26,7 @@ interface StoryViewerProps {
 
 export default function StoryViewer({ story, open, onOpenChange, currentUserId, onEdit }: StoryViewerProps) {
     const router = useRouter();
+    const [loading, setLoading] = useState(false);
     const setSelectedStoryId = useStoryStore((state) => state.setSelectedStoryId);
 
     // Request Access Modal State
@@ -53,6 +54,28 @@ export default function StoryViewer({ story, open, onOpenChange, currentUserId, 
     const handleSelect = () => {
         setSelectedStoryId(story.id, myRole);
         router.push('/dashboard');
+    };
+
+    const handleDelete = async () => {
+        if (!story || !confirm("Are you sure you want to delete this story? This action cannot be undone.")) return;
+        setLoading(true);
+
+        try {
+            const res = await fetch(`/api/stories/${story.id}`, {
+                method: 'DELETE',
+            });
+
+            if (!res.ok) throw new Error("Failed to delete story");
+
+            onOpenChange(false);
+            router.refresh(); // Refresh list to remove deleted story
+            router.push('/stories'); // Redirect to main stories page just in case
+        } catch (error) {
+            console.error("Delete error:", error);
+            // Optionally show toast error here
+        } finally {
+            setLoading(false);
+        }
     };
 
     return (
@@ -138,9 +161,11 @@ export default function StoryViewer({ story, open, onOpenChange, currentUserId, 
                                         <Button variant="outline" onClick={() => onEdit && onEdit(story)} className="px-3 hover:text-accent">
                                             <Pencil className="w-4 h-4" />
                                         </Button>
-                                        <Button variant="outline" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-200 dark:border-red-900/30">
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
+                                        {story && (
+                                            <Button variant="outline" className="px-3 text-red-500 hover:text-red-600 hover:bg-red-500/10 border-red-200 dark:border-red-900/30" disabled={loading} onClick={handleDelete}>
+                                                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                            </Button>
+                                        )}
                                     </>
                                 ) : (
                                     /* Non-Owner Actions */

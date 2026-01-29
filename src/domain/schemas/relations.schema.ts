@@ -8,7 +8,6 @@ export const EventCardLinkSchema = z.object({
     storyId: z.string().uuid(),
     eventId: z.string().uuid(),
     cardId: z.string().uuid(),
-    cardType: z.string(),
     roleId: z.string().uuid().nullable(),
     createdAt: z.date(),
 });

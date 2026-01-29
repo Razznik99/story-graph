@@ -359,6 +359,12 @@ export async function POST(req: Request) {
                 { name: 'Lifespan', type: 'Species', attrType: 'UnitNumber', description: 'Average lifespan in years.', config: { unit: 'Years' } },
             ];
 
+            const characterAttrIds: Record<string, string> = {};
+            const locationAttrIds: Record<string, string> = {};
+            const factionAttrIds: Record<string, string> = {};
+            const itemAttrIds: Record<string, string> = {};
+            const speciesAttrIds: Record<string, string> = {};
+
             for (const attr of attributeDefinitions) {
                 const cardTypeId = cardTypeMap.get(attr.type);
                 if (!cardTypeId) continue;
@@ -372,7 +378,7 @@ export async function POST(req: Request) {
                     }
                 }
 
-                await tx.attributeDefinition.create({
+                const createdAttr = await tx.attributeDefinition.create({
                     data: {
                         name: attr.name,
                         description: attr.description,
@@ -382,7 +388,102 @@ export async function POST(req: Request) {
                         storyId: newStory.id,
                     },
                 });
+
+                if (attr.type === 'Character') {
+                    characterAttrIds[attr.name] = createdAttr.id;
+                }
+                if (attr.type === 'Location') {
+                    locationAttrIds[attr.name] = createdAttr.id;
+                }
+                if (attr.type === 'Faction') {
+                    factionAttrIds[attr.name] = createdAttr.id;
+                }
+                if (attr.type === 'Item') {
+                    itemAttrIds[attr.name] = createdAttr.id;
+                }
+                if (attr.type === 'Species') {
+                    speciesAttrIds[attr.name] = createdAttr.id;
+                }
             }
+
+            // 5. Update Layout with Default Attributes
+            const typeConfigs = [
+                {
+                    type: 'Character',
+                    ids: characterAttrIds,
+                    order: ['Age', 'Archetype', 'Affiliation', 'Species', 'Status', 'Gender']
+                },
+                {
+                    type: 'Location',
+                    ids: locationAttrIds,
+                    order: ['Location Type', 'Parent Location']
+                },
+                {
+                    type: 'Faction',
+                    ids: factionAttrIds,
+                    order: ['Faction Type', 'Alignment', 'Leader']
+                },
+                {
+                    type: 'Item',
+                    ids: itemAttrIds,
+                    order: ['Item Type', 'Owner', 'Rarity']
+                },
+                {
+                    type: 'Species',
+                    ids: speciesAttrIds,
+                    order: ['Lifespan']
+                }
+            ];
+
+            for (const config of typeConfigs) {
+                const typeId = cardTypeMap.get(config.type);
+                if (typeId) {
+                    const layoutItems: any[] = [
+                        {
+                            id: "default-attributes",
+                            text: "Attributes",
+                            type: "heading",
+                            removable: false
+                        }
+                    ];
+
+                    for (const name of config.order) {
+                        if (config.ids[name]) {
+                            layoutItems.push({
+                                id: config.ids[name],
+                                type: "attribute"
+                            });
+                        }
+                    }
+
+                    await tx.cardType.update({
+                        where: { id: typeId },
+                        data: { layout: { items: layoutItems } }
+                    });
+                }
+            }
+
+
+            // 6. Create Default Timeline Config & Root Node
+            await tx.timelineConfig.create({
+                data: {
+                    storyId: newStory.id,
+                    timelineType: 'single',
+                    level1Name: 'Story',
+                    level5Name: 'Chapter',
+                    confirmed: true,
+                }
+            });
+
+            await tx.timeline.create({
+                data: {
+                    storyId: newStory.id,
+                    title: '',
+                    name: 'Story', // Root node name
+                    level: 1,
+                    position: [0, 0, 0, 0, 0],
+                }
+            });
 
             return newStory;
         });

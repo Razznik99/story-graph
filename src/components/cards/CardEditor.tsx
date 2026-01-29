@@ -606,14 +606,11 @@ export default function CardEditor({
     // If inline, render without Dialog wrapper
     if (inline) {
         return (
-            <div className="flex flex-col h-full bg-surface p-4">
-                <div className="mb-4">
-                    <h2 className="text-xl font-bold text-foreground">{card ? 'Edit Card' : 'New Card'}</h2>
-                </div>
+            <div className="flex flex-1 flex-col h-full w-full bg-surface pt-5 pl-5">
                 <div className="flex-1 overflow-y-auto pr-2">
                     {renderFormContent()}
                 </div>
-                <div className="pt-4 mt-4 border-t border-border">
+                <div className="pt-4 pr-5 pb-4 mt-4 border-t border-border">
                     <ModalFooter />
                 </div>
 

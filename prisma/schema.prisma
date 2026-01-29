@@ -478,8 +478,6 @@ model EventCardLink {
   cardId String
   card   Card   @relation(fields: [cardId], references: [id], onDelete: Cascade)
 
-  cardType String
-
   roleId String?
   role   CardRole? @relation(fields: [roleId], references: [id])
 
@@ -520,7 +518,7 @@ model TimelineConfig {
   timelineType String @default("single") // "single" or "multi"
 
   // Level definitions
-  level1Name String @default("Book")
+  level1Name String @default("Story")
 
   level2Name String? // Optional
 

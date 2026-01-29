@@ -1,5 +1,6 @@
 import { Event, EventType } from '@/domain/types';
 import { Edit, Tag } from 'lucide-react';
+import TimelinePath from './TimelinePath';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -49,8 +50,11 @@ export default function EventListItem({
                 <p className="text-sm text-muted-foreground line-clamp-1 max-w-3xl">
                     {event.description || 'No description'}
                 </p>
-                <div className="mt-2 text-xs text-muted-foreground italic">
-                    Timeline Placeholder
+                <div className="mt-2">
+                    <TimelinePath
+                        storyId={event.storyId}
+                        timelineId={event.timelineId}
+                    />
                 </div>
             </div>
 

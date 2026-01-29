@@ -42,11 +42,13 @@ export default function CardViewer({
     onClose,
     onEdit,
     inline = false,
+    onSwitchVersion,
 }: {
     card: CardWithVersion;
     onClose: () => void;
     onEdit: () => void;
     inline?: boolean;
+    onSwitchVersion?: (cardId: string) => void;
 }) {
     const [card, setCard] = useState<CardWithVersion>(initialCard);
     const [versions, setVersions] = useState<CardWithVersion[]>([]);
@@ -57,12 +59,7 @@ export default function CardViewer({
 
     useEffect(() => {
         if (card.identityId) {
-            fetch(`/api/cards?identityId=${card.identityId}&storyId=${card.storyId}&hidden=all`) // hidden=all implies we want all, though API expects explicit hidden=true/false filters. We need to fetch ALL.
-                // My API implementation: if hiddenFilter is absent, it returns all (both hidden and not hidden) unless default logic applies?
-                // Checking API: 
-                // if (hiddenFilter === 'true') where.hidden = true;
-                // if (hiddenFilter === 'false') where.hidden = false;
-                // so if omitted, it returns all. Good.
+            fetch(`/api/cards?identityId=${card.identityId}&storyId=${card.storyId}&hidden=all`)
                 .then(res => res.json())
                 .then(data => {
                     if (!Array.isArray(data)) return;
@@ -75,10 +72,13 @@ export default function CardViewer({
     }, [card.identityId, card.storyId]);
 
     const handleVersionChange = (cardId: string) => {
+        if (onSwitchVersion) {
+            onSwitchVersion(cardId);
+            return;
+        }
+
         const selected = versions.find(v => v.id === cardId);
         if (selected) {
-            // We need to keep the cardType populated if possible, or assume it's included?
-            // The API returns include: { cardType: true } for list too.
             setCard(selected);
         }
     };

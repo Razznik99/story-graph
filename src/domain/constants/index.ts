@@ -43,3 +43,10 @@ export const SUGGESTION_ACTIONS = ['CREATE', 'UPDATE', 'DELETE'] as const;
 export const SUGGESTION_TARGETS = ['CARD', 'EVENT', 'TIMELINE', 'STORY'] as const;
 
 export const AI_PROVIDERS = ['OPENAI', 'GEMINI', 'ANTHROPIC'] as const;
+
+export const INTENSITY_COLORS: Record<string, string> = {
+    LOW: 'bg-green-500/10 text-green-600 border-green-500/20',
+    MEDIUM: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20',
+    HIGH: 'bg-orange-500/10 text-orange-600 border-orange-500/20',
+    CRITICAL: 'bg-red-500/10 text-red-600 border-red-500/20',
+};

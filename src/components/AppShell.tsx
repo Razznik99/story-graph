@@ -21,26 +21,28 @@ import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
 
-const TOP_NAV = [
-    { name: 'Stories', href: '/stories', icon: BookOpen },
-    { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { name: 'Cards', href: '/cards', icon: Layers },
-    { name: 'Events', href: '/events', icon: CalendarDays },
-    { name: 'Timeline', href: '/timeline', icon: TrendingUp },
-    { name: 'Notes', href: '/note', icon: NotebookText },
-    { name: 'Analysis', href: '/analysis', icon: ChartPie },
-];
-
-const BOTTOM_NAV = [
-    { name: 'Account', href: '/account', icon: UserRound },
-    { name: 'Settings', href: '/settings', icon: Settings },
-];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
     const pathname = usePathname();
     const [isExpanded, setIsExpanded] = useState(false);
     const { theme } = useTheme();
     const isDark = theme.includes('dark');
+    const storyId = useStoryStore(state => state.selectedStoryId);
+
+    const TOP_NAV = [
+        { name: 'Stories', href: '/stories', icon: BookOpen },
+        { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+        { name: 'Cards', href: '/cards', icon: Layers },
+        { name: 'Events', href: '/events', icon: CalendarDays },
+        { name: 'Timeline', href: `/stories/${storyId}/timeline`, icon: TrendingUp },
+        { name: 'Notes', href: '/note', icon: NotebookText },
+        { name: 'Analysis', href: '/analysis', icon: ChartPie },
+    ];
+
+    const BOTTOM_NAV = [
+        { name: 'Account', href: '/account', icon: UserRound },
+        { name: 'Settings', href: '/settings', icon: Settings },
+    ];
 
     if (['/login', '/signup'].includes(pathname)) {
         return <>{children}</>;
@@ -84,7 +86,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 <div className="flex-1 flex flex-col justify-between py-4 overflow-y-auto overflow-x-hidden">
                     <nav className="px-2 space-y-1">
                         {TOP_NAV.map((item) => {
-                            const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/');
+                            const isActive = pathname === item.href || (pathname.startsWith(item.href) && item.href !== '/' && !(item.name === 'Stories' && pathname.includes('/timeline')));
                             return (
                                 <Link
                                     key={item.href}
