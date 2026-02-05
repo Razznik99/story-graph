@@ -51,6 +51,11 @@ export async function updateTimelineConfig(config: Partial<TimelineConfig>): Pro
     });
 }
 
+// Story API
+export async function getStory(storyId: string): Promise<{ title: string } | null> {
+    return fetchApi<{ title: string } | null>(`/api/stories/${storyId}`);
+}
+
 // Timeline Nodes API
 export async function listTLNodes(storyId: string): Promise<TLNode[]> {
     return fetchApi<TLNode[]>(`/api/timeline?storyId=${storyId}`);

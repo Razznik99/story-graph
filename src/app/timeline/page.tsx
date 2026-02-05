@@ -1,8 +1,7 @@
-
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useRouter, useParams } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
     PanelLeft,
@@ -21,15 +20,12 @@ import { getTimelineConfig, listEvents, listTLNodes, TimelineConfig, Timeline, E
 import TimelineExplorer from '@/components/timeline/TimelineExplorer';
 import { TimelineDock, useTimelineDock } from '@/components/timeline/TimelineDock';
 
-// Mock component for Canvas (not yet implemented)
-const TimelineCanvas = (props: any) => <div className="p-4 text-text-muted flex flex-col items-center justify-center h-full">Timeline Canvas (Coming Soon)</div>;
+import TimelineCanvas from '@/components/timeline/TimelineCanvas';
 
 export default function TimelinePage() {
     const router = useRouter();
-    const params = useParams();
-    const storyIdParam = params?.id as string;
-    const storyIdStore = useStoryStore((state) => state.selectedStoryId);
-    const storyId = storyIdParam || storyIdStore;
+    // Use the story ID from the global store
+    const storyId = useStoryStore((state) => state.selectedStoryId);
 
     const dock = useTimelineDock(storyId ?? undefined);
 
@@ -162,20 +158,16 @@ export default function TimelinePage() {
                         height: bottomCollapsed ? '100%' : topHeight,
                         transition: bottomCollapsed ? 'height 0.3s cubic-bezier(0.16, 1, 0.3, 1)' : 'none'
                     }}
-                    className="w-full bg-surface overflow-y-auto"
+                    className="w-full bg-surface overflow-hidden relative"
                 >
                     {swap ? (
                         <TimelineDock />
                     ) : (
                         <TimelineCanvas
                             storyId={storyId}
-                            timelineConfig={config}
                             events={events}
                             timelineNodes={tlNodes as Timeline[]}
                             onSelectEvent={(id: string) => dock.openEventById(id)}
-                            onZoomToLevel={(id: string) => console.log('Zoom to', id)}
-                            onRequestOpenDock={(id: string) => dock.openEventById(id)}
-                            onNavigateLevel={(id: string) => console.log('Navigate', id)}
                         />
                     )}
                 </div>
@@ -192,16 +184,12 @@ export default function TimelinePage() {
 
                 {/* BOTTOM PANEL */}
                 {!bottomCollapsed && (
-                    <div className="flex-1 min-h-0 bg-surface overflow-y-auto border-t border-border">
+                    <div className="flex-1 min-h-0 bg-surface overflow-hidden relative border-t border-border">
                         {swap ? <TimelineCanvas
                             storyId={storyId}
-                            timelineConfig={config}
                             events={events}
                             timelineNodes={tlNodes as Timeline[]}
                             onSelectEvent={(id: string) => dock.openEventById(id)}
-                            onZoomToLevel={(id: string) => console.log('Zoom to', id)}
-                            onRequestOpenDock={(id: string) => dock.openEventById(id)}
-                            onNavigateLevel={(id: string) => console.log('Navigate', id)}
                         /> : <TimelineDock />}
                     </div>
                 )}

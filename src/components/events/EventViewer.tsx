@@ -47,16 +47,6 @@ export default function EventViewer({
         }
     });
 
-    // Fetch Incoming Events
-    const { data: incomingLinks } = useQuery({
-        queryKey: ['event-relations', 'events-incoming', event.id],
-        queryFn: async () => {
-            const res = await fetch(`/api/events/relations?storyId=${event.storyId}&toEventId=${event.id}`);
-            if (!res.ok) return { links: [] };
-            return res.json();
-        }
-    });
-
     // Content component to be reused (though here we just restructure)
     // Actually we can just dynamically apply classes.
 
@@ -185,7 +175,7 @@ export default function EventViewer({
                     )}
 
                     {/* Linked Events */}
-                    {(outgoingLinks?.links?.length > 0 || incomingLinks?.links?.length > 0) && (
+                    {(outgoingLinks?.links?.length > 0) && (
                         <div className="space-y-3">
                             <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
                                 <GitCommitHorizontal className="w-4 h-4" /> Related Events
@@ -205,23 +195,6 @@ export default function EventViewer({
                                         <span className="text-sm font-medium text-foreground group-hover:text-accent transition-colors">
                                             {link.toEvent.title}
                                         </span>
-                                    </div>
-                                ))}
-                                {/* Incoming */}
-                                {incomingLinks?.links?.map((link: any) => (
-                                    <div
-                                        key={link.id}
-                                        className="p-3 bg-secondary/30 border border-border rounded-xl flex items-center gap-3 group hover:border-accent/50 cursor-pointer transition-colors"
-                                        onClick={() => onOpenEvent?.(link.fromEventId)}
-                                    >
-                                        <span className="text-sm font-medium text-foreground group-hover:text-accent transition-colors">
-                                            {link.fromEvent.title}
-                                        </span>
-                                        <span className="text-muted-foreground text-sm">→</span>
-                                        <Badge variant="outline" className="text-xs shrink-0">
-                                            {link.relationshipType}
-                                        </Badge>
-                                        <span className="text-xs text-muted-foreground italic">(this event)</span>
                                     </div>
                                 ))}
                             </div>

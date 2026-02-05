@@ -67,7 +67,7 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ type: 'card', links });
         }
 
-        // Fetch Event Links (Outgoing)
+        // Fetch Event Links (Outgoing - Linear/One-way)
         if (fromEventId) {
             const links = await prisma.eventEventLink.findMany({
                 where: { fromEventId, storyId },
@@ -77,15 +77,8 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ type: 'event-outgoing', links });
         }
 
-        // Fetch Event Links (Incoming)
-        if (toEventId) {
-            const links = await prisma.eventEventLink.findMany({
-                where: { toEventId, storyId },
-                include: { fromEvent: true },
-                orderBy: { createdAt: 'desc' }
-            });
-            return NextResponse.json({ type: 'event-incoming', links });
-        }
+        // Note: Incoming links (toEventId) block removed to enforce one-way (linear) relationships 
+        // as per TimelineCanvas requirements. Inverse relationships should be created explicitly.
 
         return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
 

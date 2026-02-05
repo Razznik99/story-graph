@@ -138,7 +138,10 @@ export async function GET(req: NextRequest) {
 
         const events = await prisma.event.findMany({
             where: { storyId: targetStoryId },
-            include: { eventType: true },
+            include: {
+                eventType: true,
+                linkedEventsFrom: true // Include outgoing relations for TimelineCanvas
+            },
             orderBy: { order: 'asc' }
         });
 

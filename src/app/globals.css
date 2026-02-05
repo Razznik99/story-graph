@@ -296,3 +296,44 @@ input[type="number"]::-webkit-outer-spin-button {
 input[type="number"] {
   -moz-appearance: textfield;
 }
+
+/* SVG Utilities */
+.fill-surface {
+  fill: var(--color-surface);
+}
+
+.fill-background {
+  fill: var(--color-background);
+}
+
+.fill-primary {
+  fill: var(--color-text-primary);
+}
+
+.fill-secondary {
+  fill: var(--color-text-secondary);
+}
+
+.fill-muted {
+  fill: var(--color-text-muted);
+}
+
+.fill-accent {
+  fill: var(--color-accent);
+}
+
+.stroke-border {
+  stroke: var(--color-border);
+}
+
+.stroke-primary {
+  stroke: var(--color-text-primary);
+}
+
+.stroke-secondary {
+  stroke: var(--color-text-secondary);
+}
+
+.stroke-accent {
+  stroke: var(--color-accent);
+}

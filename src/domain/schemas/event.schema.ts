@@ -39,6 +39,14 @@ export const EventSchema = z.object({
     timelineId: z.string().uuid().nullable(),
     order: z.number().int(),
     tags: z.array(z.string()),
+    linkedEventsTo: z.array(z.object({
+        toEventId: z.string().uuid(),
+        relationshipType: z.string() // Using string for enum to avoid import cycles, or use EventRelationshipType enum if available
+    })).optional(),
+    linkedEventsFrom: z.array(z.object({
+        fromEventId: z.string().uuid(),
+        relationshipType: z.string()
+    })).optional(),
     createdAt: z.date(),
     updatedAt: z.date(),
 });
