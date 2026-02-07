@@ -31,7 +31,7 @@ export default function EventViewer({
     const { data: cardLinks } = useQuery({
         queryKey: ['event-relations', 'cards', event.id],
         queryFn: async () => {
-            const res = await fetch(`/api/events/relations?storyId=${event.storyId}&eventId=${event.id}`);
+            const res = await fetch(`/api/events/relations?storyId=${event.storyId}&eventId=${event.id}&type=card`);
             if (!res.ok) return { links: [] };
             return res.json();
         }
@@ -41,7 +41,7 @@ export default function EventViewer({
     const { data: outgoingLinks } = useQuery({
         queryKey: ['event-relations', 'events-outgoing', event.id],
         queryFn: async () => {
-            const res = await fetch(`/api/events/relations?storyId=${event.storyId}&fromEventId=${event.id}`);
+            const res = await fetch(`/api/events/relations?storyId=${event.storyId}&eventId=${event.id}&type=event`);
             if (!res.ok) return { links: [] };
             return res.json();
         }
@@ -186,14 +186,14 @@ export default function EventViewer({
                                     <div
                                         key={link.id}
                                         className="p-3 bg-secondary/30 border border-border rounded-xl flex items-center gap-3 group hover:border-accent/50 cursor-pointer transition-colors"
-                                        onClick={() => onOpenEvent?.(link.toEventId)}
+                                        onClick={() => onOpenEvent?.(link.linkId)}
                                     >
                                         <Badge variant="outline" className="text-xs shrink-0">
                                             {link.relationshipType}
                                         </Badge>
                                         <span className="text-muted-foreground text-sm">→</span>
                                         <span className="text-sm font-medium text-foreground group-hover:text-accent transition-colors">
-                                            {link.toEvent.title}
+                                            {link.link?.title || 'Unknown'}
                                         </span>
                                     </div>
                                 ))}

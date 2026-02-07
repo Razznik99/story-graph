@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { z } from 'zod';
 import { CreateEventSchema, UpdateEventSchema } from '@/domain/schemas/event.schema';
 import { prisma } from '@/lib/prisma';
 import { checkStoryPermission } from '@/lib/permissions';
@@ -140,7 +139,7 @@ export async function GET(req: NextRequest) {
             where: { storyId: targetStoryId },
             include: {
                 eventType: true,
-                linkedEventsFrom: true // Include outgoing relations for TimelineCanvas
+                // outgoingLinks: true // Include outgoing relations for TimelineCanvas
             },
             orderBy: { order: 'asc' }
         });

@@ -438,9 +438,9 @@ model Event {
 
   tags String[]
 
-  linkedCards      EventCardLink[]
-  linkedEventsFrom EventEventLink[] @relation("FromEvent")
-  linkedEventsTo   EventEventLink[] @relation("ToEvent")
+  linkedCards          EventCardLink[]
+  outgoingLinks    EventEventLink[] @relation("Source")
+  incomingLinks    EventEventLink[] @relation("Target")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -494,20 +494,20 @@ model EventEventLink {
   storyId String
   story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
-  fromEventId String
-  fromEvent   Event  @relation("FromEvent", fields: [fromEventId], references: [id], onDelete: Cascade)
+  eventId String
+  event   Event  @relation("Source", fields: [eventId], references: [id], onDelete: Cascade)
 
-  toEventId String
-  toEvent   Event  @relation("ToEvent", fields: [toEventId], references: [id], onDelete: Cascade)
+  linkId String
+  link   Event  @relation("Target", fields: [linkId], references: [id], onDelete: Cascade)
 
   relationshipType EventRelationshipType
 
   createdAt DateTime @default(now())
 
-  @@unique([fromEventId, toEventId, relationshipType])
+  @@unique([eventId, linkId, relationshipType])
   @@index([storyId])
-  @@index([fromEventId])
-  @@index([toEventId])
+  @@index([eventId])
+  @@index([linkId])
 }
 
 model TimelineConfig {

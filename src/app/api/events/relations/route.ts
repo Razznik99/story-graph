@@ -2,31 +2,9 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
 import { checkStoryPermission } from '@/lib/permissions';
 import { CollaborationRole } from '@/domain/roles';
-import { EventCardLinkSchema } from '@/domain/schemas/relations.schema';
-
-const CreateEventCardLinkSchema = z.object({
-    type: z.literal('card'),
-    storyId: z.string().uuid(),
-    eventId: z.string().uuid(),
-    cardId: z.string().uuid(),
-    roleId: z.string().uuid().nullable().optional(),
-});
-
-const CreateEventEventLinkSchema = z.object({
-    type: z.literal('event'),
-    storyId: z.string().uuid(),
-    fromEventId: z.string().uuid(),
-    toEventId: z.string().uuid(),
-    relationshipType: z.enum([
-        'CAUSES', 'CAUSED_BY', 'FORESHADOWS', 'RESOLVES',
-        'ESCALATES', 'DEESCALATES', 'PARALLEL_TO', 'CONTRADICTS'
-    ]),
-});
-
-const CreateRelationSchema = z.union([CreateEventCardLinkSchema, CreateEventEventLinkSchema]);
+import { CreateRelationSchema } from '@/domain/schemas/relations.schema';
 
 /* -------------------------------------------------------------------------- */
 /*                                     GET                                    */
@@ -41,9 +19,9 @@ export async function GET(req: NextRequest) {
 
         const { searchParams } = new URL(req.url);
         const eventId = searchParams.get('eventId');
-        const fromEventId = searchParams.get('fromEventId');
-        const toEventId = searchParams.get('toEventId');
+        const linkId = searchParams.get('linkId'); // Was toEventId
         const storyId = searchParams.get('storyId');
+        const type = searchParams.get('type'); // optional explicit type filter if needed
 
         if (!storyId) {
             return NextResponse.json({ error: 'storyId required' }, { status: 400 });
@@ -54,33 +32,36 @@ export async function GET(req: NextRequest) {
             return NextResponse.json({ error: permission.error }, { status: permission.status || 403 });
         }
 
-        // Fetch Card Links
+        // Fetch Specific Event Links
         if (eventId) {
-            const links = await prisma.eventCardLink.findMany({
-                where: { eventId, storyId },
-                include: {
-                    card: true,
-                    role: true
-                },
-                orderBy: { createdAt: 'desc' }
-            });
-            return NextResponse.json({ type: 'card', links });
-        }
+            // Card Links
+            if (type === 'card') {
+                const links = await prisma.eventCardLink.findMany({
+                    where: { eventId, storyId },
+                    include: { card: true, role: true },
+                    orderBy: { createdAt: 'desc' }
+                });
+                return NextResponse.json({ type: 'card', links });
+            }
 
-        // Fetch Event Links (Outgoing - Linear/One-way)
-        if (fromEventId) {
+            // Event Links (Outgoing) - Default if type is 'event' or undefined
             const links = await prisma.eventEventLink.findMany({
-                where: { fromEventId, storyId },
-                include: { toEvent: true },
+                where: { eventId, storyId },
+                include: { link: true },
                 orderBy: { createdAt: 'desc' }
             });
             return NextResponse.json({ type: 'event-outgoing', links });
         }
 
-        // Note: Incoming links (toEventId) block removed to enforce one-way (linear) relationships 
-        // as per TimelineCanvas requirements. Inverse relationships should be created explicitly.
-
-        return NextResponse.json({ error: 'Invalid parameters' }, { status: 400 });
+        // Fetch All Story Event Links (if no eventId provided)
+        if (storyId && (!type || type === 'event')) {
+            const links = await prisma.eventEventLink.findMany({
+                where: { storyId },
+                include: { link: true },
+                orderBy: { createdAt: 'desc' }
+            });
+            return NextResponse.json({ type: 'event-outgoing', links });
+        }
 
     } catch (err) {
         console.error('Relations GET error:', err);
@@ -149,18 +130,18 @@ export async function POST(req: NextRequest) {
         }
 
         if (data.type === 'event') {
-            if (data.fromEventId === data.toEventId) {
+            if (data.eventId === data.linkId) {
                 return NextResponse.json({ error: 'Cannot link event to itself' }, { status: 400 });
             }
 
             const link = await prisma.eventEventLink.create({
                 data: {
                     storyId,
-                    fromEventId: data.fromEventId,
-                    toEventId: data.toEventId,
+                    eventId: data.eventId,
+                    linkId: data.linkId,
                     relationshipType: data.relationshipType,
                 },
-                include: { toEvent: true, fromEvent: true }
+                include: { link: true, event: true }
             });
             return NextResponse.json(link, { status: 201 });
         }

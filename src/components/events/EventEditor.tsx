@@ -52,8 +52,12 @@ export default function EventEditor({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
 
-    const [pendingCardLinks, setPendingCardLinks] = useState<{ cardId: string; roleId?: string | null }[]>([]);
-    const [pendingEventLinks, setPendingEventLinks] = useState<{ toEventId: string; relationshipType: string }[]>([]);
+    const [pendingCardLinks, setPendingCardLinks] = useState<{ id?: string; cardId: string; roleId?: string | null }[]>([]);
+    const [pendingEventLinks, setPendingEventLinks] = useState<{ id?: string; linkId: string; relationshipType: string }[]>([]);
+
+    // For diffing
+    const [initialCardLinks, setInitialCardLinks] = useState<{ id: string; cardId: string; roleId?: string | null }[]>([]);
+    const [initialEventLinks, setInitialEventLinks] = useState<{ id: string; linkId: string; relationshipType: string }[]>([]);
 
     useEffect(() => {
         // Fetch event types
@@ -79,8 +83,41 @@ export default function EventEditor({
                 tags: event.tags || [],
                 timelineId: event.timelineId || '',
             });
+
+            // Fetch relations
+            Promise.all([
+                fetch(`/api/events/relations?storyId=${storyId}&eventId=${event.id}&type=card`).then(res => res.json()),
+                fetch(`/api/events/relations?storyId=${storyId}&eventId=${event.id}&type=event`).then(res => res.json())
+            ]).then(([cardData, eventData]) => {
+                if (cardData && cardData.links) {
+                    const mappedCards = cardData.links.map((l: any) => ({
+                        id: l.id,
+                        cardId: l.cardId,
+                        roleId: l.roleId
+                    }));
+                    setCardLinksState(mappedCards);
+                }
+                if (eventData && eventData.links) {
+                    const mappedEvents = eventData.links.map((l: any) => ({
+                        id: l.id,
+                        linkId: l.linkId,
+                        relationshipType: l.relationshipType
+                    }));
+                    setEventLinksState(mappedEvents);
+                }
+            }).catch(console.error);
         }
     }, [storyId, event]);
+
+    // Helper to set both initial and pending
+    const setCardLinksState = (links: any[]) => {
+        setInitialCardLinks(links);
+        setPendingCardLinks(links);
+    };
+    const setEventLinksState = (links: any[]) => {
+        setInitialEventLinks(links);
+        setPendingEventLinks(links);
+    };
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
@@ -109,46 +146,62 @@ export default function EventEditor({
             if (res.ok) {
                 const savedEvent = await res.json();
 
-                // If creating, process pending links
-                if (!event && savedEvent.id) {
+                // Manage Relations (Create or Edit)
+                if (savedEvent.id) {
                     const promises = [];
 
-                    // Card Links
-                    if (pendingCardLinks.length > 0) {
-                        for (const link of pendingCardLinks) {
-                            promises.push(
-                                fetch('/api/events/relations', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        type: 'card',
-                                        storyId,
-                                        eventId: savedEvent.id,
-                                        cardId: link.cardId,
-                                        roleId: link.roleId
-                                    })
-                                })
-                            );
-                        }
+                    // --- Processing Card Links ---
+                    // 1. Delete removed links (present in initial but not in pending)
+                    const cardLinksToDelete = initialCardLinks.filter(init => !pendingCardLinks.find(p => p.id === init.id));
+                    for (const link of cardLinksToDelete) {
+                        promises.push(
+                            fetch(`/api/events/relations?id=${link.id}&type=card`, { method: 'DELETE' })
+                        );
                     }
 
-                    // Event Links
-                    if (pendingEventLinks.length > 0) {
-                        for (const link of pendingEventLinks) {
-                            promises.push(
-                                fetch('/api/events/relations', {
-                                    method: 'POST',
-                                    headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({
-                                        type: 'event',
-                                        storyId,
-                                        fromEventId: savedEvent.id,
-                                        toEventId: link.toEventId,
-                                        relationshipType: link.relationshipType
-                                    })
+                    // 2. Create new links (present in pending but have no id)
+                    const cardLinksToAdd = pendingCardLinks.filter(p => !p.id);
+                    for (const link of cardLinksToAdd) {
+                        promises.push(
+                            fetch('/api/events/relations', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    type: 'card',
+                                    storyId,
+                                    eventId: savedEvent.id,
+                                    cardId: link.cardId,
+                                    roleId: link.roleId
                                 })
-                            );
-                        }
+                            })
+                        );
+                    }
+
+                    // --- Processing Event Links ---
+                    // 1. Delete removed
+                    const eventLinksToDelete = initialEventLinks.filter(init => !pendingEventLinks.find(p => p.id === init.id));
+                    for (const link of eventLinksToDelete) {
+                        promises.push(
+                            fetch(`/api/events/relations?id=${link.id}&type=event`, { method: 'DELETE' })
+                        );
+                    }
+
+                    // 2. Create new
+                    const eventLinksToAdd = pendingEventLinks.filter(p => !p.id);
+                    for (const link of eventLinksToAdd) {
+                        promises.push(
+                            fetch('/api/events/relations', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    type: 'event',
+                                    storyId,
+                                    eventId: savedEvent.id,
+                                    linkId: link.linkId,
+                                    relationshipType: link.relationshipType
+                                })
+                            })
+                        );
                     }
 
                     await Promise.all(promises);
@@ -317,19 +370,19 @@ export default function EventEditor({
                     <LinkedCardsEditor
                         storyId={storyId}
                         eventId={event?.id}
-                        pendingLinks={event?.id ? undefined : pendingCardLinks}
-                        onChangePending={event?.id ? undefined : setPendingCardLinks}
+                        pendingLinks={pendingCardLinks}
+                        onChangePending={setPendingCardLinks}
                     />
                     <LinkedEventsEditor
                         storyId={storyId}
                         eventId={event?.id}
-                        pendingLinks={event?.id ? undefined : pendingEventLinks}
-                        onChangePending={event?.id ? undefined : setPendingEventLinks}
+                        pendingLinks={pendingEventLinks}
+                        onChangePending={setPendingEventLinks}
                     />
                 </div>
             </form>
 
-            <DialogFooter className="flex justify-between sm:justify-between w-full p-4 border-t border-border mt-auto">
+            <DialogFooter className="flex justify-between sm:justify-between w-full p-4 border-t border-border mt-4">
                 {event ? (
                     <Button
                         type="button"

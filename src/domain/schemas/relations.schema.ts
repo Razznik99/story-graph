@@ -15,8 +15,8 @@ export const EventCardLinkSchema = z.object({
 export const EventEventLinkSchema = z.object({
     id: z.string().uuid(),
     storyId: z.string().uuid(),
-    fromEventId: z.string().uuid(),
-    toEventId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    linkId: z.string().uuid(),
     relationshipType: EventRelationshipTypeSchema,
     createdAt: z.date(),
 });
@@ -29,3 +29,21 @@ export const NoteNoteLinkSchema = z.object({
     relationType: z.enum(NOTE_RELATION_TYPES),
     createdAt: z.date(),
 });
+
+export const CreateEventCardLinkSchema = z.object({
+    type: z.literal('card'),
+    storyId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    cardId: z.string().uuid(),
+    roleId: z.string().uuid().nullable().optional(),
+});
+
+export const CreateEventEventLinkSchema = z.object({
+    type: z.literal('event'),
+    storyId: z.string().uuid(),
+    eventId: z.string().uuid(),
+    linkId: z.string().uuid(),
+    relationshipType: EventRelationshipTypeSchema,
+});
+
+export const CreateRelationSchema = z.union([CreateEventCardLinkSchema, CreateEventEventLinkSchema]);
