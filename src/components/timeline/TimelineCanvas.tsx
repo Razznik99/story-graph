@@ -85,35 +85,33 @@ export default function TimelineCanvas({
 
     // Handle Centering of Event after Navigation
     useEffect(() => {
-        if (pendingCenterEventId) {
-            const item = layoutItems.find(i => i.id === pendingCenterEventId);
-            if (item) {
-                // Center the camera on the event
-                controls.setCamera({
-                    x: -item.x,
-                    y: 0,
-                    scale: 1,
-                });
-                // Highlight and Select
-                setActiveEventIds(new Set([pendingCenterEventId]));
-                onSelectEvent(pendingCenterEventId);
-                setPendingCenterEventId(null);
-            }
-        }
-    }, [pendingCenterEventId, layoutItems, controls, onSelectEvent]);
+        if (!pendingCenterEventId) return;
 
-    const handleArcClick = (e: React.MouseEvent, targetEvent: Event) => {
+        centerOnEvent(pendingCenterEventId);
+        setActiveEventIds(prev => {
+            const next = new Set(prev);
+            next.add(pendingCenterEventId);
+            return next;
+        });
+        onSelectEvent(pendingCenterEventId);
+        setPendingCenterEventId(null);
+    }, [pendingCenterEventId, layoutItems]);
+
+
+    const handleArcNavigate = (
+        e: React.PointerEvent,
+        targetEvent: Event
+    ) => {
         e.stopPropagation();
-        setHoveredLink(null); // Clear tooltip
-
+        setHoveredLink(null);
+        // Navigate level if needed
         if (targetEvent.timelineId && targetEvent.timelineId !== currentLevelId) {
-            // Need to navigate first
-            // Note: We bypass handleNavigate's default resetCamera because we want to target a specific event
             setCurrentLevelId(targetEvent.timelineId);
-            setActiveEventIds(new Set()); // interim clear
+            setActiveEventIds(new Set());
+            setPendingCenterEventId(targetEvent.id);
         }
 
-        // Trigger centering (will run after layout update if level changed, or immediately if same level)
+        // Defer centering until layout updates
         setPendingCenterEventId(targetEvent.id);
     };
 
@@ -126,6 +124,56 @@ export default function TimelineCanvas({
 
         const arcItems: React.ReactNode[] = [];
 
+        // Helper to compare positions
+        const comparePositions = (
+            curr: number[],
+            target: number[]
+        ): {
+            type: 'same' | 'child' | 'sibling' | 'parent' | 'ancestor-sibling';
+            diff?: number;
+            dir?: 'before' | 'after';
+        } => {
+            const len = Math.max(curr.length, target.length);
+            for (let i = 0; i < len; i++) {
+                const c = curr[i] ?? 0;
+                const t = target[i] ?? 0;
+
+                // identical so far
+                if (c === t) continue;
+
+                // Case 2: sublevel
+                if (c === 0 && t !== 0) {
+                    return { type: 'child' };
+                }
+
+                // Case 5: parent or higher
+                if (c !== 0 && t === 0) {
+                    return { type: 'parent' };
+                }
+
+                // both non-zero and different
+                const isLast = i === curr.length - 1;
+
+                if (isLast) {
+                    return {
+                        type: 'sibling',
+                        diff: t - c
+                    };
+                }
+
+                return {
+                    type: 'ancestor-sibling',
+                    dir: t > c ? 'after' : 'before'
+                };
+            }
+
+            return { type: 'same' };
+        };
+
+
+        const currentLevelNode = timelineNodes.find(n => n.id === currentLevelId);
+        const currentPos = currentLevelNode?.position || [];
+
         activeEventIds.forEach(eventId => {
             const event = events.find(e => e.id === eventId);
             const sourceItem = itemMap.get(eventId);
@@ -134,93 +182,161 @@ export default function TimelineCanvas({
             if (!event || !sourceItem || !links) return;
 
             links.forEach(link => {
-                const targetItem = itemMap.get(link.linkId);
-                // If target is not in current layout (e.g. different level), we can't draw the full arc *to* it easily
-                // accurately in this view without complex cross-level logic. 
-                // However, the request implies we can click it. 
-                // If the target is NOT in the current layoutItems, we might skip drawing it OR draw it pointing off-screen?
-                // The current implementation only draws if both source and target are in itemMap (current level).
-                // "clicking on an arc link should navigate to event.timeline (level of that event if !== current level)"
-                // This implies we ARE seeing arcs to other levels? 
-                // If 'targetItem' is missing, it means it's on another level.
-                // If we want to support cross-level arcs, we'd need to know where to draw them.
-                // Assuming for now we only support arcs between visible events based on existing code:
-                // "const targetItem = itemMap.get(link.linkId); if (!targetItem) return;"
+                const targetEvent = events.find(e => e.id === link.linkId);
+                // If target event doesn't exist in loaded events, we key off metadata if available? 
+                // For now assuming we have it.
+                if (!targetEvent) return;
 
-                // WAIT. If the user wants to navigate to another level, the arc must be visible. 
-                // But the current code explicitly returns if targetItem is missing.
-                // If the user implies arcs *can* point to other levels, I need to know.
-                // The prompt says: "clicking on an arc link should navigate to event.timeline (level of that event if !== current level)"
-                // This strongly implies arcs to off-screen/other-level events.
-                // But `calculateSingleLevelLayout` only returns items for `currentLevelId`.
-                // If I don't draw it, I can't click it.
-                // I will assume for this task that we stick to the existing visibility logic (only visible relations), 
-                // BUT if they ARE on the same level, navigation isn't needed (just centering).
-                // IF the user intends for us to visualize Cross-Level links, that's a much bigger task (layout wise).
-                // However, the prompt says "level of that event if !== current level". 
-                // This implies the target MIGHT be on a different level. 
-                // If the target is on a different level, how is it rendered?
-                // Perhaps the User expects us to render "dangling" arcs or arcs to "ghost" nodes?
-                // Or maybe the user *thinks* they are visible?
-                // OR: Maybe the user means "If I have an event selected, I see arcs. If I click an arc..."
-                // Actually, if an event is on another level, it won't have a `LayoutItem` in this level.
-                // So `itemMap.get(link.linkId)` returns undefined.
-                // So the arc isn't drawn.
-                // I should probably check if the user *wants* cross-level arcs?
-                // BUT, I can't easily draw an arc to "nowhere".
-                // Let's assume the user might have placed related events on the SAME level for now, OR they want this upgrade *so that* they can eventually support cross-level.
-                // OR, perhaps some events are visible that I'm missing? No.
-                // I will stick to: If drawn, make it clickable. If it happens to be on another level (e.g. if we change layout logic later), it works.
-                // Actually, if `targetItem` is missing, maybe I should look up the global event list?
-                // If I find the target event in `events`, but it's not in `layoutItems`, it's on another level.
-                // I could draw a stub arc?
-                // For this task, I will strictly upgrade the properties of *existing* drawn arcs.
-                // If no arcs currently draw across levels, I won't force them to yet (as that requires design decisions on "where" they point).
-                // I will proceed with adding interactions to the *drawn* arcs.
-
-                if (!targetItem) return;
-
-                const startX = sourceItem.x;
-                const endX = targetItem.x;
-                const radius = Math.abs(endX - startX) / 2;
-                const sweep = startX < endX ? 0 : 1;
-
-                // Identifier for hover
+                // Determine styling
                 const isHovered = hoveredLink?.title === link.link?.title && hoveredLink?.type === link.relationshipType;
+                const baseOpacity = isHovered ? 1 : 0.85;
+                const strokeColor = "var(--color-accent)";
 
-                arcItems.push(
-                    <path
-                        key={`${event.id}-${link.linkId}`}
-                        d={`M ${startX} 0 A ${radius} ${radius} 0 0 ${sweep} ${endX} 0`}
-                        fill="none"
-                        stroke="var(--color-accent)"
-                        strokeWidth={3}
-                        vectorEffect="non-scaling-stroke"
-                        opacity={isHovered ? 1 : 0.85}
-                        className="cursor-pointer transition-opacity"
-                        onMouseEnter={(e) => {
-                            if (link.link) {
-                                setHoveredLink({
-                                    x: e.clientX,
-                                    y: e.clientY,
-                                    title: link.link.title,
-                                    type: link.relationshipType
-                                });
-                            }
-                        }}
-                        onMouseLeave={() => setHoveredLink(null)}
-                        onClick={(e) => {
-                            if (link.link) {
-                                handleArcClick(e, link.link);
-                            }
-                        }}
-                    />
-                );
+                // Event Handlers
+                const handlers = {
+                    onPointerDown: (e: React.PointerEvent) => {
+                        e.stopPropagation();
+                    },
+                    onMouseEnter: (e: React.MouseEvent) => {
+                        if (link.link) {
+                            setHoveredLink({
+                                x: e.clientX,
+                                y: e.clientY,
+                                title: link.link.title,
+                                type: link.relationshipType
+                            });
+                        }
+                    },
+                    onMouseLeave: () => setHoveredLink(null),
+                    onClick: (e: React.MouseEvent) => {
+                        if (targetEvent) {
+                            handleArcNavigate(e as any, targetEvent);
+                        }
+                    }
+                };
+
+
+                // Case Logic
+                let targetX = sourceItem.x;
+                let targetY = 0;
+                let pathD = "";
+
+                // Find Target Node Level Info
+                const targetLevelNode = timelineNodes.find(n => n.id === targetEvent.timelineId);
+                const targetPos = targetLevelNode?.position || [];
+
+                // Compare
+                // If target is in current level (Case 1)
+                if (targetEvent.timelineId === currentLevelId) {
+                    const targetItem = itemMap.get(targetEvent.id);
+                    if (targetItem) {
+                        targetX = targetItem.x;
+                        // Rainbow: Inverted arc logic.
+                        // Standard arc: A posx posy rot large sweep endx endy
+                        // To curve UP (negative Y), we depend on sweep flag and starting/ending order.
+                        // But simple quadratic bezier is easier to control for "Rainbow".
+                        // M startX 0 Q (startX+endX)/2 -height result
+                        // Calculate height based on distance?
+                        const dist = Math.abs(targetX - sourceItem.x);
+                        const height = Math.max(50, dist / 2); // Minimum height
+
+                        // Path: M startX 0 Q midX -height endX 0
+                        const midX = (sourceItem.x + targetX) / 2;
+                        pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
+                    }
+                } else {
+                    // Cross-Level Logic
+                    const rel = comparePositions(currentPos, targetPos);
+
+                    if (rel.type === 'child') {
+                        // Case 2: SubLevel
+                        // Find layoutItem (type subLevel) that is ancestor of target
+                        const targetSubItem = layoutItems.find(i =>
+                            i.type === 'subLevel' &&
+                            // i.data is the Node.
+                            // We check if i.data.position is a prefix of targetPos
+                            // AND i.data.position.length > currentPos.length (Logic ensures layoutItems are children)
+                            i.data?.position &&
+                            i.data.position.length <= targetPos.length &&
+                            i.data.position.every((v: number, k: number) => v === targetPos[k])
+                        );
+
+                        if (targetSubItem) {
+                            targetX = targetSubItem.x;
+                            // Draw arc to it
+                            const dist = Math.abs(targetX - sourceItem.x);
+                            const height = Math.max(50, dist / 2);
+                            const midX = (sourceItem.x + targetX) / 2;
+                            pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} -20`; // End slightly above 0 for level
+                        }
+                    }
+                    else if (rel.type === 'sibling') {
+                        // Case 3 & 4
+                        const diff = rel.diff!;
+                        let navItem: LayoutItem | undefined;
+                        let offsetX = 0;
+
+                        if (diff > 0) {
+                            // Next
+                            navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'next');
+                            // Case 4: Distant (>1)
+                            if (diff > 1) offsetX = 150;
+                        } else {
+                            // Prev
+                            navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'prev');
+                            // Case 4: Distant (<-1)
+                            if (diff < -1) offsetX = -150;
+                        }
+
+                        if (navItem) {
+                            targetX = navItem.x + offsetX;
+                            const dist = Math.abs(targetX - sourceItem.x);
+                            const height = Math.max(60, dist / 3);
+                            // Control point biased towards target?
+                            const midX = (sourceItem.x + targetX) / 2;
+                            pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
+                        }
+                    }
+                    else if (rel.type === 'parent') {
+                        // Case 5: Highest (Parent)
+                        // Straight UP
+                        // Fade out?
+                        pathD = `M ${sourceItem.x} 0 L ${sourceItem.x} -300`;
+                    }
+                    else if (rel.type === 'ancestor-sibling') {
+                        // Case 5: Higher Sibling (Left/Right)
+                        // Curve out of view
+                        const isRight = rel.dir === 'after';
+                        // If sibling is 'after' (value > current), it's to the RIGHT?
+                        // If parent's sibling is > parent, then that branch is to the RIGHT of current branch? 
+                        // Yes, if sorted ascending.
+                        const endX = isRight ? sourceItem.x + 400 : sourceItem.x - 400;
+                        const endY = -400;
+                        pathD = `M ${sourceItem.x} 0 Q ${sourceItem.x} -200 ${endX} ${endY}`;
+                    }
+                }
+
+                if (pathD) {
+                    arcItems.push(
+                        <path
+                            key={`${event.id}-${link.linkId}`}
+                            d={pathD}
+                            fill="none"
+                            stroke={strokeColor}
+                            strokeWidth={3}
+                            vectorEffect="non-scaling-stroke"
+                            opacity={baseOpacity}
+                            className="cursor-pointer transition-opacity"
+                            {...handlers}
+                        />
+
+                    );
+                }
             });
         });
 
         return arcItems;
-    }, [activeEventIds, layoutItems, events, hoveredLink, linkMap]);
+    }, [activeEventIds, layoutItems, events, hoveredLink, linkMap, currentLevelId, timelineNodes]);
 
 
     // Search Options
@@ -252,6 +368,17 @@ export default function TimelineCanvas({
             x: 0,
             y: 0,
             scale: 1
+        });
+    };
+
+    const centerOnEvent = (eventId: string) => {
+        const item = layoutItems.find(i => i.id === eventId);
+        if (!item) return;
+
+        controls.setCamera({
+            x: -item.x,
+            y: 0,
+            scale: 1,
         });
     };
 
@@ -359,12 +486,14 @@ export default function TimelineCanvas({
             {/* Tooltip */}
             {hoveredLink && (
                 <div
-                    className="fixed z-50 pointer-events-none px-3 py-1.5 bg-popover text-popover-foreground text-sm rounded-md border shadow-md flex flex-col gap-0.5"
+                    className="fixed z-50 pointer-events-none px-3 py-1.5 bg-popover text-popover-foreground text-sm rounded-md border shadow-md flex flex-col gap-0.5 text-center"
                     style={{
-                        left: hoveredLink.x + 16,
-                        top: hoveredLink.y + 16,
+                        left: hoveredLink.x,
+                        top: hoveredLink.y - 12,
+                        transform: 'translate(-50%, -100%)',
                     }}
                 >
+
                     <span className="font-semibold">{hoveredLink.title}</span>
                     <span className="text-xs text-muted-foreground opacity-90 uppercase tracking-wider">{hoveredLink.type}</span>
                 </div>
@@ -390,6 +519,10 @@ export default function TimelineCanvas({
                         animate={{ x: camera.x, y: camera.y, scale: camera.scale }}
                         transition={{ duration: 0 }}
                     >
+
+                        {/* Arcs */}
+                        {arcs}
+
                         {/* Mainline */}
                         <line
                             x1={-5000} y1={0}
@@ -400,9 +533,6 @@ export default function TimelineCanvas({
                             className="stroke-primary"
                         />
 
-
-                        {/* Arcs */}
-                        {arcs}
 
                         {/* Items */}
                         {layoutItems.map(item => {
