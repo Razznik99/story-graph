@@ -35,7 +35,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { name: 'Cards', href: '/cards', icon: Layers },
         { name: 'Events', href: '/events', icon: CalendarDays },
         { name: 'Timeline', href: `/timeline`, icon: TrendingUp },
-        { name: 'Notes', href: '/note', icon: NotebookText },
+        { name: 'Notes', href: '/notes', icon: NotebookText },
         { name: 'Analysis', href: '/analysis', icon: ChartPie },
     ];
 

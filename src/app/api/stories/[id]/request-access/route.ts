@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 export async function POST(
     req: Request,
-    { params }: { params: { id: string } }
+    props: { params: Promise<{ id: string }> }
 ) {
     try {
         const session = await getServerSession(authOptions) as any;
@@ -15,6 +15,7 @@ export async function POST(
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
+        const params = await props.params;
         const storyId = params.id;
         const body = await req.json();
         const { role, message } = CollaborationRequestSchema.parse(body);

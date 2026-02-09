@@ -1,0 +1,18 @@
+ok lets create Note Page
+
+note page would be divided into 'Note' and 'Story' tab
+
+'Note' tab would show all the notes
+'Story' tab would show all the timeline notes
+
+normally notes would have the timelineId field as null, but if the note is a timeline note(Story Tab), it would have the timelineId field as the timeline id
+each timeline would have only one note, that would be created, updated and deleted with the timeline
+
+the notes tab would display the regular notes with title, line clamped content, tags, updated at
+the notes tab should have a search bar to search notes by title and tags, and a button to create a new note
+the story tab would display the timeline notes with title(timeline name ), line clamped content, tags, timeline path, updated at; timeline name can either be in the format of (timeline.name - timeline.title) or (timeline.name) or (timeline.title) or (int - timeline name)
+story tab should have a bar that display stories by level1-5(timeline.level, and if a level isnt active in the config, it shouldnt be part of the level selector) and a search bar to search stories by title
+
+clicking on one of the notes/stories would open the NoteEditor
+
+NoteEditor would have the header to edit title, the content area would use tipTap editor to edit content, tags would use tagInput, and a save, cancel, delete button

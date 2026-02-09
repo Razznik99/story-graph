@@ -219,10 +219,10 @@ export function TimelineDock() {
                     <div
                         key={tab.id}
                         className={cn(
-                            "group flex items-center px-4 py-2 text-sm border-r border-border/50 cursor-pointer min-w-[120px] max-w-[200px] select-none transition-colors",
+                            "group flex items-center px-4 py-2 text-sm border-r border-border/50 cursor-pointer min-w-[120px] max-w-[250px] select-none transition-colors",
                             activeTab === tab.id
-                                ? "bg-surface text-accent font-medium shadow-sm ring-1 ring-inset ring-border/0 border-b-transparent -mb-px z-10"
-                                : "hover:bg-surface-2 text-text-secondary hover:text-text-primary"
+                                ? "bg-surface-2 text-accent font-medium shadow-sm ring-1 ring-inset ring-border/0 border-b-transparent -mb-px z-10"
+                                : "hover:bg-surface text-text-secondary hover:text-text-primary"
                         )}
                         onClick={() => setActiveTab(tab.id)}
                         title={tab.title}

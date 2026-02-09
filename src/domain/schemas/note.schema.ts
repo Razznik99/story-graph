@@ -7,7 +7,7 @@ export const NoteSchema = z.object({
     id: z.string().uuid(),
     storyId: z.string().uuid(),
     title: z.string().min(1).max(200),
-    content: z.string(), // markdown
+    content: z.any(), // TipTap JSON
     tags: z.array(z.string()),
     timelineId: z.string().uuid().nullable(),
     createdAt: z.date(),
@@ -16,7 +16,7 @@ export const NoteSchema = z.object({
 
 export const CreateNoteSchema = z.object({
     title: z.string().min(1).max(200),
-    content: z.string().optional().default(""),
+    content: z.any().optional().default({}),
     tags: z.array(z.string()).optional(),
     timelineId: z.string().uuid().optional(),
 });

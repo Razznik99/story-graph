@@ -603,7 +603,7 @@ model Note {
   story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
   title   String   @db.VarChar(200)
-  content String // markdown
+  content Json // TipTap JSON
   tags    String[]
 
   // Chapter binding (1 note per timeline node)

@@ -48,8 +48,8 @@ export default function ThemeTab() {
                     <button
                         onClick={() => handleModeChange('light')}
                         className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${currentMode === 'light'
-                                ? 'border-accent bg-accent/5'
-                                : 'border-border hover:border-text-secondary bg-surface'
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border hover:border-text-secondary bg-surface'
                             }`}
                     >
                         <Sun className={`w-8 h-8 mb-3 ${currentMode === 'light' ? 'text-accent' : 'text-text-secondary'}`} />
@@ -59,8 +59,8 @@ export default function ThemeTab() {
                     <button
                         onClick={() => handleModeChange('dark')}
                         className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 transition-all duration-200 ${currentMode === 'dark'
-                                ? 'border-accent bg-accent/5'
-                                : 'border-border hover:border-text-secondary bg-surface'
+                            ? 'border-accent bg-accent/5'
+                            : 'border-border hover:border-text-secondary bg-surface'
                             }`}
                     >
                         <Moon className={`w-8 h-8 mb-3 ${currentMode === 'dark' ? 'text-accent' : 'text-text-secondary'}`} />
@@ -82,7 +82,6 @@ export default function ThemeTab() {
             <section className="space-y-4">
                 <div className="flex justify-between items-end">
                     <h2 className="text-lg font-semibold text-text-primary">Temperature</h2>
-                    <span className="text-sm text-text-secondary font-medium capitalize">{currentTemp}</span>
                 </div>
 
                 <div className="bg-surface p-6 rounded-xl border border-border">
@@ -104,7 +103,10 @@ export default function ThemeTab() {
                             max="2"
                             step="1"
                             value={temps.indexOf(currentTemp)}
-                            onChange={(e) => handleTempChange(temps[parseInt(e.target.value)])}
+                            onChange={(e) => {
+                                const val = temps[parseInt(e.target.value)];
+                                if (val) handleTempChange(val);
+                            }}
                             className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
                         />
                     </div>
