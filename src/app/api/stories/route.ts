@@ -475,13 +475,24 @@ export async function POST(req: Request) {
                 }
             });
 
-            await tx.timeline.create({
+            const rootTimelineNode = await tx.timeline.create({
                 data: {
                     storyId: newStory.id,
                     title: '',
                     name: 'Story', // Root node name
                     level: 1,
                     position: [0, 0, 0, 0, 0],
+                }
+            });
+
+            // Create default Note for the root timeline node
+            await tx.note.create({
+                data: {
+                    title: 'Story Note',
+                    content: '',
+                    storyId: newStory.id,
+                    timelineId: rootTimelineNode.id,
+                    tags: [],
                 }
             });
 

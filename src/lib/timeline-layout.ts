@@ -208,7 +208,7 @@ export function calculateSingleLevelLayout(
     // Left Edge Divider
     // If hasEvents: Left of FirstEvent @ leftBoundary - GAP.
     // If !hasEvents: Left of Center @ -GAP.
-    const divLeftX = hasEvents ? (leftBoundary - CONSTANTS.GAP) : -CONSTANTS.GAP;
+    const divLeftX = hasEvents ? (leftBoundary - CONSTANTS.GAP) : 0;
     items.push({
         id: 'left-divider',
         type: 'divider',

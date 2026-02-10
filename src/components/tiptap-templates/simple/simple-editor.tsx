@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import { EditorContent, EditorContext, useEditor } from "@tiptap/react"
+import { ArrowDownToLine, ArrowUpToLine } from "lucide-react"
 
 // --- Tiptap Core Extensions ---
 import { StarterKit } from "@tiptap/starter-kit"
@@ -52,7 +53,6 @@ import {
 } from "@/components/tiptap-ui/link-popover"
 import { MarkButton } from "@/components/tiptap-ui/mark-button"
 import { TextAlignButton } from "@/components/tiptap-ui/text-align-button"
-import { UndoRedoButton } from "@/components/tiptap-ui/undo-redo-button"
 
 // --- Icons ---
 import { ArrowLeftIcon } from "@/components/tiptap-icons/arrow-left-icon"
@@ -61,11 +61,6 @@ import { LinkIcon } from "@/components/tiptap-icons/link-icon"
 
 // --- Hooks ---
 import { useIsBreakpoint } from "@/hooks/use-is-breakpoint"
-import { useWindowSize } from "@/hooks/use-window-size"
-import { useCursorVisibility } from "@/hooks/use-cursor-visibility"
-
-// --- Components ---
-
 
 // --- Lib ---
 import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
@@ -73,15 +68,21 @@ import { handleImageUpload, MAX_FILE_SIZE } from "@/lib/tiptap-utils"
 // --- Styles ---
 import "@/components/tiptap-templates/simple/simple-editor.scss"
 
-const MainToolbarContent = ({
-    onHighlighterClick,
-    onLinkClick,
-    isMobile,
-}: {
+function MainToolbarContent(props: {
     onHighlighterClick: () => void
     onLinkClick: () => void
     isMobile: boolean
-}) => {
+    toolbarPosition: "top" | "bottom"
+    onTogglePosition: () => void
+}) {
+    const {
+        onHighlighterClick,
+        onLinkClick,
+        isMobile,
+        toolbarPosition,
+        onTogglePosition,
+    } = props
+
     return (
         <>
             <Spacer />
@@ -136,52 +137,68 @@ const MainToolbarContent = ({
 
             <Spacer />
 
+            <ToolbarGroup>
+                <Button
+                    onClick={onTogglePosition}
+                    className="h-8 w-8 p-0"
+                    title={`Move toolbar to ${toolbarPosition === "top" ? "bottom" : "top"
+                        }`}
+                >
+                    {toolbarPosition === "top" ? (
+                        <ArrowDownToLine className="h-4 w-4" />
+                    ) : (
+                        <ArrowUpToLine className="h-4 w-4" />
+                    )}
+                </Button>
+            </ToolbarGroup>
+
             {isMobile && <ToolbarSeparator />}
-
-
         </>
     )
 }
 
-const MobileToolbarContent = ({
-    type,
-    onBack,
-}: {
+function MobileToolbarContent(props: {
     type: "highlighter" | "link"
     onBack: () => void
-}) => (
-    <>
-        <ToolbarGroup>
-            <Button data-style="ghost" onClick={onBack}>
-                <ArrowLeftIcon className="tiptap-button-icon" />
-                {type === "highlighter" ? (
-                    <HighlighterIcon className="tiptap-button-icon" />
-                ) : (
-                    <LinkIcon className="tiptap-button-icon" />
-                )}
-            </Button>
-        </ToolbarGroup>
+}) {
+    const { type, onBack } = props
 
-        <ToolbarSeparator />
+    return (
+        <>
+            <ToolbarGroup>
+                <Button data-style="ghost" onClick={onBack}>
+                    <ArrowLeftIcon className="tiptap-button-icon" />
+                    {type === "highlighter" ? (
+                        <HighlighterIcon className="tiptap-button-icon" />
+                    ) : (
+                        <LinkIcon className="tiptap-button-icon" />
+                    )}
+                </Button>
+            </ToolbarGroup>
 
-        {type === "highlighter" ? (
-            <ColorHighlightPopoverContent />
-        ) : (
-            <LinkContent />
-        )}
-    </>
-)
+            <ToolbarSeparator />
+
+            {type === "highlighter" ? (
+                <ColorHighlightPopoverContent />
+            ) : (
+                <LinkContent />
+            )}
+        </>
+    )
+}
 
 export interface SimpleEditorProps {
-    content?: any;
-    onChange?: (content: any) => void;
+    content?: any
+    onChange?: (content: any) => void
 }
 
 export function SimpleEditor({ content, onChange }: SimpleEditorProps) {
     const isMobile = useIsBreakpoint()
-    const { height } = useWindowSize()
-    const [mobileView, setMobileView] = useState<"main" | "highlighter" | "link">(
-        "main"
+    const [mobileView, setMobileView] = useState<
+        "main" | "highlighter" | "link"
+    >("main")
+    const [toolbarPosition, setToolbarPosition] = useState<"top" | "bottom">(
+        "bottom"
     )
     const toolbarRef = useRef<HTMLDivElement>(null)
 
@@ -189,10 +206,6 @@ export function SimpleEditor({ content, onChange }: SimpleEditorProps) {
         immediatelyRender: false,
         editorProps: {
             attributes: {
-                autocomplete: "off",
-                autocorrect: "off",
-                autocapitalize: "off",
-                "aria-label": "Main content area, start typing to enter text.",
                 class: "simple-editor",
             },
         },
@@ -201,7 +214,6 @@ export function SimpleEditor({ content, onChange }: SimpleEditorProps) {
                 horizontalRule: false,
                 link: {
                     openOnClick: false,
-                    enableClickSelection: true,
                 },
             }),
             HorizontalRule,
@@ -219,18 +231,12 @@ export function SimpleEditor({ content, onChange }: SimpleEditorProps) {
                 maxSize: MAX_FILE_SIZE,
                 limit: 3,
                 upload: handleImageUpload,
-                onError: (error) => console.error("Upload failed:", error),
             }),
         ],
         content: content || "",
         onUpdate: ({ editor }) => {
             onChange?.(editor.getJSON())
-        }
-    })
-
-    const rect = useCursorVisibility({
-        editor,
-        overlayHeight: toolbarRef.current?.getBoundingClientRect().height ?? 0,
+        },
     })
 
     useEffect(() => {
@@ -239,38 +245,49 @@ export function SimpleEditor({ content, onChange }: SimpleEditorProps) {
         }
     }, [isMobile, mobileView])
 
-    return (
-        <div className="simple-editor-wrapper">
-            <EditorContext.Provider value={{ editor }}>
-                <Toolbar
-                    ref={toolbarRef}
-                    style={{
-                        ...(isMobile
-                            ? {
-                                bottom: `calc(100% - ${height - rect.y}px)`,
-                            }
-                            : {}),
-                    }}
-                >
-                    {mobileView === "main" ? (
-                        <MainToolbarContent
-                            onHighlighterClick={() => setMobileView("highlighter")}
-                            onLinkClick={() => setMobileView("link")}
-                            isMobile={isMobile}
-                        />
-                    ) : (
-                        <MobileToolbarContent
-                            type={mobileView === "highlighter" ? "highlighter" : "link"}
-                            onBack={() => setMobileView("main")}
-                        />
-                    )}
-                </Toolbar>
+    function ToolbarContent() {
+        return mobileView === "main" ? (
+            <MainToolbarContent
+                onHighlighterClick={() => setMobileView("highlighter")}
+                onLinkClick={() => setMobileView("link")}
+                isMobile={isMobile}
+                toolbarPosition={toolbarPosition}
+                onTogglePosition={() =>
+                    setToolbarPosition(p => (p === "top" ? "bottom" : "top"))
+                }
+            />
+        ) : (
+            <MobileToolbarContent
+                type={mobileView === "highlighter" ? "highlighter" : "link"}
+                onBack={() => setMobileView("main")}
+            />
+        )
+    }
 
-                <EditorContent
-                    editor={editor}
-                    role="presentation"
-                    className="simple-editor-content"
-                />
+    return (
+        <div className="simple-editor-wrapper h-full flex flex-col">
+            <EditorContext.Provider value={{ editor }}>
+                {toolbarPosition === "top" && (
+                    <Toolbar
+                        ref={toolbarRef}
+                        className="sticky top-0 z-10 bg-background border-b"
+                    >
+                        <ToolbarContent />
+                    </Toolbar>
+                )}
+
+                <div className="flex-1 overflow-y-auto">
+                    <EditorContent editor={editor} />
+                </div>
+
+                {toolbarPosition === "bottom" && (
+                    <Toolbar
+                        ref={toolbarRef}
+                        className="sticky bottom-0 z-10 bg-background border-t"
+                    >
+                        <ToolbarContent />
+                    </Toolbar>
+                )}
             </EditorContext.Provider>
         </div>
     )

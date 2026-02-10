@@ -190,6 +190,17 @@ export async function PUT(req: Request) {
                     },
                 });
 
+                // Create default Note for the root timeline node
+                await tx.note.create({
+                    data: {
+                        title: 'Story Note',
+                        content: '',
+                        storyId: storyId,
+                        timelineId: rootTimelineNode.id,
+                        tags: [],
+                    }
+                });
+
                 // Fetch all events for this story
                 const allEvents = await tx.event.findMany({
                     where: { storyId: storyId },
