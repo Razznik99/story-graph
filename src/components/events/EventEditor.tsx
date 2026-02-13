@@ -3,6 +3,7 @@ import { Event, EventType, EventIntensity, EventVisibility } from '@/domain/type
 import TimelineField from './TimelineField';
 import LinkedCardsEditor from './LinkedCardsEditor';
 import LinkedEventsEditor from './LinkedEventsEditor';
+import InverseRelationManager from './InverseRelationManager';
 import TagInput from '../TagInput';
 import { X, Loader2, Trash, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
@@ -58,6 +59,9 @@ export default function EventEditor({
     // For diffing
     const [initialCardLinks, setInitialCardLinks] = useState<{ id: string; cardId: string; roleId?: string | null }[]>([]);
     const [initialEventLinks, setInitialEventLinks] = useState<{ id: string; linkId: string; relationshipType: string }[]>([]);
+
+    const [showInverseManager, setShowInverseManager] = useState(false);
+    const [executedRelations, setExecutedRelations] = useState<{ added: any[], deleted: any[] }>({ added: [], deleted: [] });
 
     useEffect(() => {
         // Fetch event types
@@ -205,10 +209,41 @@ export default function EventEditor({
                     }
 
                     await Promise.all(promises);
+
+                    // Track what we just did for Inverse Manager
+                    // We need to pass the Source ID (this event) and Target ID (linked event)
+                    // The 'added' objects currently look like { linkId, relationshipType, ... }
+                    // The 'deleted' objects look like { id, linkId, relationshipType, ... } (from initialEventLinks)
+
+                    const addedForManager = eventLinksToAdd.map(link => ({
+                        sourceId: savedEvent.id, // This event
+                        targetId: link.linkId,
+                        relationshipType: link.relationshipType
+                    }));
+
+                    const deletedForManager = eventLinksToDelete.map(link => ({
+                        sourceId: savedEvent.id, // This event
+                        targetId: link.linkId,
+                        relationshipType: link.relationshipType
+                    }));
+
+                    if (addedForManager.length > 0 || deletedForManager.length > 0) {
+                        setExecutedRelations({
+                            added: addedForManager,
+                            deleted: deletedForManager
+                        });
+                        setShowInverseManager(true);
+                        // Do NOT onClose() here, wait for Inverse Manager
+                    } else {
+                        toast.success(event ? 'Event updated' : 'Event created');
+                        onClose();
+                    }
+                } else {
+                    // If for some reason we created an event but didn't get an ID? Should not happen if res.ok
+                    toast.success(event ? 'Event updated' : 'Event created');
+                    onClose();
                 }
 
-                toast.success(event ? 'Event updated' : 'Event created');
-                onClose();
             } else {
                 const errData = await res.json();
                 setError(errData.error || 'Failed to save event');
@@ -406,14 +441,43 @@ export default function EventEditor({
     );
 
     if (inline) {
-        return content;
+        return (
+            <>
+                {content}
+                <InverseRelationManager
+                    storyId={storyId}
+                    isOpen={showInverseManager}
+                    onClose={() => {
+                        setShowInverseManager(false);
+                        onClose();
+                    }}
+                    addedRelations={executedRelations.added}
+                    deletedRelations={executedRelations.deleted}
+                    currentEventTitle={formData.title}
+                />
+            </>
+        );
     }
 
     return (
-        <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
-            <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
-                {content}
-            </DialogContent>
-        </Dialog>
+        <>
+            <Dialog open={!showInverseManager} onOpenChange={(open) => !open && onClose()}>
+                <DialogContent className="sm:max-w-[600px] max-h-[90vh] overflow-y-auto">
+                    {content}
+                </DialogContent>
+            </Dialog>
+            <InverseRelationManager
+                storyId={storyId}
+                isOpen={showInverseManager}
+                onClose={() => {
+                    setShowInverseManager(false);
+                    onClose();
+                }}
+                addedRelations={executedRelations.added}
+                deletedRelations={executedRelations.deleted}
+                currentEventTitle={formData.title}
+            />
+        </>
     );
+
 }

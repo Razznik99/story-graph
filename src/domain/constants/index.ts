@@ -34,6 +34,17 @@ export const EVENT_RELATIONSHIP_TYPES = [
     'CAUSES', 'CAUSED_BY', 'FORESHADOWS', 'RESOLVES', 'ESCALATES', 'DEESCALATES', 'PARALLEL_TO', 'CONTRADICTS'
 ] as const;
 
+export const INVERSE_RELATIONSHIP_MAP: Record<string, string> = {
+    'CAUSES': 'CAUSED_BY',
+    'CAUSED_BY': 'CAUSES',
+    'FORESHADOWS': 'RESOLVES',
+    'RESOLVES': 'FORESHADOWS',
+    'ESCALATES': 'DEESCALATES',
+    'DEESCALATES': 'ESCALATES',
+    'PARALLEL_TO': 'PARALLEL_TO',
+    'CONTRADICTS': 'CONTRADICTS',
+};
+
 export const NOTE_RELATION_TYPES = ['REFERENCES', 'EXPANDS', 'DRAFT_OF', 'CONTRADICTS'] as const;
 
 export const ANALYSIS_TYPES = ['auto', 'manual', 'scheduled'] as const;
