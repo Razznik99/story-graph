@@ -1,5 +1,5 @@
-
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
@@ -186,7 +186,7 @@ export async function PUT(req: Request) {
                         title: '', // User title defaults to empty
                         name: updatedConfig.level1Name || 'Story',
                         level: 1,
-                        position: [0, 0, 0, 0, 0], // Initial position for the root
+                        orderKey: new Prisma.Decimal(1000), // Initial orderKey for the root
                     },
                 });
 

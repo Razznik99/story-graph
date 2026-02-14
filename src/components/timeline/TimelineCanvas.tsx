@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useTimelineStore } from '@/store/useTimelineStore';
 import { useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
 import { useCamera } from '@/hooks/useCamera';
-import { TimelineConfig, Timeline, Event } from '@/lib/timeline-api';
+import { TimelineConfig, Timeline, Event, getTimelineConfig } from '@/lib/timeline-api';
 import { calculateSingleLevelLayout, LayoutItem, LANES } from '@/lib/timeline-layout';
+import { getDerivedNumber } from './timeline-explorer-helpers';
 import { TimelineCanvasControls } from './TimelineCanvasControls';
 import { Option } from '@/components/ui/searchable-select';
 import { INTENSITY_COLORS } from '@/domain/constants/index';
@@ -25,7 +27,8 @@ export default function TimelineCanvas({
         minScale: 0.1,
         maxScale: 3
     });
-    const [currentLevelId, setCurrentLevelId] = useState<string | null>(null);
+
+    const { currentLevelId, setCurrentLevelId } = useTimelineStore();
     const [currentLevelName, setCurrentLevelName] = useState("Story Start");
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [activeEventIds, setActiveEventIds] = useState<Set<string>>(new Set());
@@ -49,6 +52,13 @@ export default function TimelineCanvas({
         enabled: !!storyId
     });
 
+    const { data: config } = useQuery({
+        queryKey: ['tl', 'config', storyId],
+        queryFn: () => getTimelineConfig(storyId),
+        enabled: !!storyId,
+        staleTime: Infinity,
+    });
+
     const linkMap = useMemo(() => {
         const map = new Map<string, any[]>();
         if (relationsData?.links) {
@@ -61,27 +71,40 @@ export default function TimelineCanvas({
     }, [relationsData]);
 
 
-    // Initialize currentLevelId
+    // Initialize currentLevelId & Safety Check
     useEffect(() => {
-        if (!currentLevelId && timelineNodes.length > 0) {
-            const root = timelineNodes.find(n => !n.parentId);
-            if (root) setCurrentLevelId(root.id);
+        if (timelineNodes.length > 0) {
+            // If currentLevelId is set but not found, or not set at all, default to root
+            const exists = currentLevelId && timelineNodes.find(n => n.id === currentLevelId);
+            if (!currentLevelId || !exists) {
+                const root = timelineNodes.find(n => !n.parentId);
+                if (root) setCurrentLevelId(root.id);
+            }
         }
     }, [timelineNodes, currentLevelId]);
 
     // Update level name display
     useEffect(() => {
-        if (currentLevelId) {
+        if (currentLevelId && config) {
             const node = timelineNodes.find(n => n.id === currentLevelId);
-            if (node) setCurrentLevelName(node.title || node.name || "Level");
+            if (node) {
+                const num = getDerivedNumber(node, timelineNodes, config);
+                const base = node.title || node.name || "Level";
+
+                // Condition: Single Timeline Level 1 -> No Number
+                const isSingleRoot = config.timelineType === 'single' && node.level === 1;
+
+                setCurrentLevelName(isSingleRoot ? base : `${base} ${num}`);
+            }
         } else {
             setCurrentLevelName("Story");
         }
-    }, [currentLevelId, timelineNodes]);
+    }, [currentLevelId, timelineNodes, config]);
 
     const layoutItems = useMemo(() => {
-        return calculateSingleLevelLayout(currentLevelId, timelineNodes, events);
-    }, [currentLevelId, timelineNodes, events]);
+        if (!config) return [];
+        return calculateSingleLevelLayout(currentLevelId, timelineNodes, events, config);
+    }, [currentLevelId, timelineNodes, events, config]);
 
     // Handle Centering of Event after Navigation
     useEffect(() => {
@@ -124,79 +147,93 @@ export default function TimelineCanvas({
 
         const arcItems: React.ReactNode[] = [];
 
-        // Helper to compare positions
-        const comparePositions = (
-            curr: number[],
-            target: number[]
+        // Helper to find ancestor at specific level
+        const getAncestorAtLevel = (startNode: Timeline, targetLevel: number): Timeline | null => {
+            let curr: Timeline | undefined = startNode;
+            while (curr && curr.level > targetLevel) {
+                if (!curr.parentId) return null;
+                curr = timelineNodes.find(n => n.id === curr!.parentId);
+            }
+            return curr && curr.level === targetLevel ? curr : null;
+        };
+
+        const analyzeRelation = (
+            sourceNode: Timeline,
+            targetNode: Timeline
         ): {
             type: 'same' | 'child' | 'sibling' | 'parent' | 'ancestor-sibling';
             diff?: number;
             dir?: 'before' | 'after';
         } => {
-            const len = Math.max(curr.length, target.length);
-            for (let i = 0; i < len; i++) {
-                const c = curr[i] ?? 0;
-                const t = target[i] ?? 0;
+            if (sourceNode.id === targetNode.id) return { type: 'same' };
 
-                // identical so far
-                if (c === t) continue;
-
-                // Case 2: sublevel
-                if (c === 0 && t !== 0) {
+            // Case 1: Target is SubLevel (Deeper)
+            if (targetNode.level > sourceNode.level) {
+                // Check direct child (ancestor at level+1 has parent == source)
+                const childAncestor = getAncestorAtLevel(targetNode, sourceNode.level + 1);
+                if (childAncestor && childAncestor.parentId === sourceNode.id) {
                     return { type: 'child' };
                 }
 
-                // Case 5: parent or higher
-                if (c !== 0 && t === 0) {
-                    return { type: 'parent' };
+                // If not direct child, check ancestor at same level (sibling/peer)
+                const peer = getAncestorAtLevel(targetNode, sourceNode.level);
+                if (peer && peer.id !== sourceNode.id) {
+                    const peerOrder = Number(peer.orderKey ?? 0);
+                    const sourceOrder = Number(sourceNode.orderKey ?? 0);
+                    const diff = peerOrder > sourceOrder ? 1 : -1;
+                    return { type: 'sibling', diff };
                 }
+                return { type: 'same' };
+            }
 
-                // both non-zero and different
-                const isLast = i === curr.length - 1;
-
-                if (isLast) {
-                    return {
-                        type: 'sibling',
-                        diff: t - c
-                    };
+            // Case 2: Target is Higher Level (Ancestor)
+            if (targetNode.level < sourceNode.level) {
+                const sourceAncestor = getAncestorAtLevel(sourceNode, targetNode.level);
+                if (sourceAncestor) {
+                    if (sourceAncestor.id === targetNode.id) {
+                        return { type: 'parent' };
+                    } else {
+                        // Ancestor Sibling
+                        const targetOrder = Number(targetNode.orderKey ?? 0);
+                        const ancestorOrder = Number(sourceAncestor.orderKey ?? 0);
+                        return {
+                            type: 'ancestor-sibling',
+                            dir: targetOrder > ancestorOrder ? 'after' : 'before'
+                        };
+                    }
                 }
+            }
 
-                return {
-                    type: 'ancestor-sibling',
-                    dir: t > c ? 'after' : 'before'
-                };
+            // Case 3: Same Level Sibling
+            if (targetNode.level === sourceNode.level) {
+                const targetOrder = Number(targetNode.orderKey ?? 0);
+                const sourceOrder = Number(sourceNode.orderKey ?? 0);
+                return { type: 'sibling', diff: targetOrder > sourceOrder ? 1 : -1 };
             }
 
             return { type: 'same' };
         };
 
-
         const currentLevelNode = timelineNodes.find(n => n.id === currentLevelId);
-        const currentPos = currentLevelNode?.position || [];
+        if (!currentLevelNode) return [];
 
         activeEventIds.forEach(eventId => {
             const event = events.find(e => e.id === eventId);
             const sourceItem = itemMap.get(eventId);
-
             const links = linkMap.get(eventId);
+
             if (!event || !sourceItem || !links) return;
 
             links.forEach(link => {
                 const targetEvent = events.find(e => e.id === link.linkId);
-                // If target event doesn't exist in loaded events, we key off metadata if available? 
-                // For now assuming we have it.
                 if (!targetEvent) return;
 
-                // Determine styling
                 const isHovered = hoveredLink?.title === link.link?.title && hoveredLink?.type === link.relationshipType;
                 const baseOpacity = isHovered ? 1 : 0.85;
                 const strokeColor = "var(--color-accent)";
 
-                // Event Handlers
                 const handlers = {
-                    onPointerDown: (e: React.PointerEvent) => {
-                        e.stopPropagation();
-                    },
+                    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
                     onMouseEnter: (e: React.MouseEvent) => {
                         if (link.link) {
                             setHoveredLink({
@@ -209,110 +246,68 @@ export default function TimelineCanvas({
                     },
                     onMouseLeave: () => setHoveredLink(null),
                     onClick: (e: React.MouseEvent) => {
-                        if (targetEvent) {
-                            handleArcNavigate(e as any, targetEvent);
-                        }
+                        if (targetEvent) handleArcNavigate(e as any, targetEvent);
                     }
                 };
 
-
-                // Case Logic
                 let targetX = sourceItem.x;
-                let targetY = 0;
                 let pathD = "";
 
-                // Find Target Node Level Info
-                const targetLevelNode = timelineNodes.find(n => n.id === targetEvent.timelineId);
-                const targetPos = targetLevelNode?.position || [];
-
-                // Compare
-                // If target is in current level (Case 1)
                 if (targetEvent.timelineId === currentLevelId) {
                     const targetItem = itemMap.get(targetEvent.id);
                     if (targetItem) {
                         targetX = targetItem.x;
-                        // Rainbow: Inverted arc logic.
-                        // Standard arc: A posx posy rot large sweep endx endy
-                        // To curve UP (negative Y), we depend on sweep flag and starting/ending order.
-                        // But simple quadratic bezier is easier to control for "Rainbow".
-                        // M startX 0 Q (startX+endX)/2 -height result
-                        // Calculate height based on distance?
-                        const dist = Math.abs(targetX - sourceItem.x);
-                        const height = Math.max(50, dist / 2); // Minimum height
-
-                        // Path: M startX 0 Q midX -height endX 0
                         const midX = (sourceItem.x + targetX) / 2;
+                        const dist = Math.abs(targetX - sourceItem.x);
+                        const height = Math.max(50, dist / 2);
                         pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
                     }
                 } else {
-                    // Cross-Level Logic
-                    const rel = comparePositions(currentPos, targetPos);
+                    const targetNode = timelineNodes.find(n => n.id === targetEvent.timelineId);
+                    if (targetNode) {
+                        const rel = analyzeRelation(currentLevelNode, targetNode);
 
-                    if (rel.type === 'child') {
-                        // Case 2: SubLevel
-                        // Find layoutItem (type subLevel) that is ancestor of target
-                        const targetSubItem = layoutItems.find(i =>
-                            i.type === 'subLevel' &&
-                            // i.data is the Node.
-                            // We check if i.data.position is a prefix of targetPos
-                            // AND i.data.position.length > currentPos.length (Logic ensures layoutItems are children)
-                            i.data?.position &&
-                            i.data.position.length <= targetPos.length &&
-                            i.data.position.every((v: number, k: number) => v === targetPos[k])
-                        );
-
-                        if (targetSubItem) {
-                            targetX = targetSubItem.x;
-                            // Draw arc to it
-                            const dist = Math.abs(targetX - sourceItem.x);
-                            const height = Math.max(50, dist / 2);
-                            const midX = (sourceItem.x + targetX) / 2;
-                            pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} -20`; // End slightly above 0 for level
+                        if (rel.type === 'child') {
+                            const childNode = getAncestorAtLevel(targetNode, currentLevelNode.level + 1);
+                            if (childNode) {
+                                const targetSubItem = layoutItems.find(i => i.type === 'subLevel' && i.data?.id === childNode.id);
+                                if (targetSubItem) {
+                                    targetX = targetSubItem.x;
+                                    const midX = (sourceItem.x + targetX) / 2;
+                                    const dist = Math.abs(targetX - sourceItem.x);
+                                    const height = Math.max(50, dist / 2);
+                                    pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} -20`;
+                                }
+                            }
                         }
-                    }
-                    else if (rel.type === 'sibling') {
-                        // Case 3 & 4
-                        const diff = rel.diff!;
-                        let navItem: LayoutItem | undefined;
-                        let offsetX = 0;
+                        else if (rel.type === 'sibling') {
+                            const diff = rel.diff!;
+                            let navItem: LayoutItem | undefined;
+                            let offsetX = 0;
+                            if (diff > 0) {
+                                navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'next');
+                                if (diff > 1) offsetX = 150; // Distant
+                            } else {
+                                navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'prev');
+                                if (diff < -1) offsetX = -150; // Distant
+                            }
 
-                        if (diff > 0) {
-                            // Next
-                            navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'next');
-                            // Case 4: Distant (>1)
-                            if (diff > 1) offsetX = 150;
-                        } else {
-                            // Prev
-                            navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'prev');
-                            // Case 4: Distant (<-1)
-                            if (diff < -1) offsetX = -150;
+                            if (navItem) {
+                                targetX = navItem.x + offsetX;
+                                const midX = (sourceItem.x + targetX) / 2;
+                                const dist = Math.abs(targetX - sourceItem.x);
+                                const height = Math.max(60, dist / 3);
+                                pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
+                            }
                         }
-
-                        if (navItem) {
-                            targetX = navItem.x + offsetX;
-                            const dist = Math.abs(targetX - sourceItem.x);
-                            const height = Math.max(60, dist / 3);
-                            // Control point biased towards target?
-                            const midX = (sourceItem.x + targetX) / 2;
-                            pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
+                        else if (rel.type === 'parent') {
+                            pathD = `M ${sourceItem.x} 0 L ${sourceItem.x} -300`;
                         }
-                    }
-                    else if (rel.type === 'parent') {
-                        // Case 5: Highest (Parent)
-                        // Straight UP
-                        // Fade out?
-                        pathD = `M ${sourceItem.x} 0 L ${sourceItem.x} -300`;
-                    }
-                    else if (rel.type === 'ancestor-sibling') {
-                        // Case 5: Higher Sibling (Left/Right)
-                        // Curve out of view
-                        const isRight = rel.dir === 'after';
-                        // If sibling is 'after' (value > current), it's to the RIGHT?
-                        // If parent's sibling is > parent, then that branch is to the RIGHT of current branch? 
-                        // Yes, if sorted ascending.
-                        const endX = isRight ? sourceItem.x + 400 : sourceItem.x - 400;
-                        const endY = -400;
-                        pathD = `M ${sourceItem.x} 0 Q ${sourceItem.x} -200 ${endX} ${endY}`;
+                        else if (rel.type === 'ancestor-sibling') {
+                            const isRight = rel.dir === 'after';
+                            const endX = isRight ? sourceItem.x + 400 : sourceItem.x - 400;
+                            pathD = `M ${sourceItem.x} 0 Q ${sourceItem.x} -200 ${endX} -400`;
+                        }
                     }
                 }
 
@@ -329,14 +324,13 @@ export default function TimelineCanvas({
                             className="cursor-pointer transition-opacity"
                             {...handlers}
                         />
-
                     );
                 }
             });
         });
 
         return arcItems;
-    }, [activeEventIds, layoutItems, events, hoveredLink, linkMap, currentLevelId, timelineNodes]);
+    }, [activeEventIds, layoutItems, events, hoveredLink, linkMap, currentLevelId, timelineNodes, config]);
 
 
     // Search Options

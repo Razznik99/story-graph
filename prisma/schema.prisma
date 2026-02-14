@@ -545,7 +545,7 @@ model Timeline {
   parent   Timeline?  @relation("TimelineTree", fields: [parentId], references: [id])
   children Timeline[] @relation("TimelineTree")
 
-  position Int[]
+  orderKey Decimal @db.Decimal(20, 6)
   name     String  @default("")
   title    String?
   level    Int
@@ -559,10 +559,10 @@ model Timeline {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  @@unique([storyId, position])
   @@index([storyId])
   @@index([parentId])
   @@index([level])
+  @@index([storyId, parentId, orderKey]) // Efficient ordering per level
 }
 
 model TimelinePath {

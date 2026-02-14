@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listTLNodes, getTimelineConfig, TLNode } from '@/lib/timeline-api';
 import { TimelineConfig } from '@/lib/timeline-api';
 import { ChevronRight, X } from 'lucide-react';
-import { buildIndex, getLevelName } from '../timeline/timeline-explorer-helpers';
+import { buildIndex, getLevelName, getNodeOrder, getDerivedNumber } from '../timeline/timeline-explorer-helpers';
 import { cn } from '@/lib/utils';
 
 interface TimelineFieldProps {
@@ -76,7 +76,8 @@ export default function TimelineField({ storyId, value, onChange }: TimelineFiel
                 const name = n.name?.toLowerCase() || '';
                 const lvlName = cfg ? getLevelName(n.level, cfg).toLowerCase() : '';
                 // Check for integer match if query is a number
-                const isIntMatch = !isNaN(parseInt(q)) && (n.position?.[n.position.length - 1] === parseInt(q));
+                const order = cfg ? getDerivedNumber(n, nodes, cfg) : getNodeOrder(n.id, byParent, nodes);
+                const isIntMatch = !isNaN(parseInt(q)) && (order === parseInt(q));
 
                 return title.includes(q) || name.includes(q) || lvlName.includes(q) || isIntMatch;
             }).slice(0, 10); // Limit results
@@ -129,7 +130,11 @@ export default function TimelineField({ storyId, value, onChange }: TimelineFiel
     };
 
     // Helper to get display name
-    const getDisplayName = (n: TLNode) => n.name || n.title || (cfg ? getLevelName(n.level, cfg) : `Level ${n.level}`);
+    const getDisplayName = (n: TLNode) => {
+        const order = cfg ? getDerivedNumber(n, nodes, cfg) : getNodeOrder(n.id, byParent, nodes);
+        const base = n.name || (cfg ? getLevelName(n.level, cfg) : `Level ${n.level}`);
+        return n.title ? `${base} ${order} - ${n.title}` : `${base} ${order}`;
+    };
 
     return (
         <div className="relative" ref={containerRef}>

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
 import prisma from '@/lib/prisma';
 import { checkStoryPermission } from '@/lib/permissions';
 import { CollaborationRole } from '@/domain/roles';
@@ -67,26 +68,16 @@ async function handleReorderNode(storyId: string, nodeId: string, direction: 'up
         return NextResponse.json({ error: 'Node not found' }, { status: 404 });
     }
 
-    const { parentId, level, position } = node;
-    const levelIndex = level - 1;
-    const currentPosValue = position[levelIndex] ?? 0;
+    const { parentId, level, orderKey } = node;
 
     // Find siblings
-    // We need to compare based on the position value at levelIndex
-    // And ensure parentId matches
     const siblings = await prisma.timeline.findMany({
         where: {
             storyId,
-            parentId: parentId, // can be null
+            parentId: parentId, // strict parent scoping
             level: level,
         },
-    });
-
-    // Sort siblings by position
-    siblings.sort((a, b) => {
-        const pA = a.position[levelIndex] ?? 0;
-        const pB = b.position[levelIndex] ?? 0;
-        return pA - pB;
+        orderBy: { orderKey: 'asc' },
     });
 
     const currentIndex = siblings.findIndex(s => s.id === nodeId);
@@ -95,7 +86,6 @@ async function handleReorderNode(storyId: string, nodeId: string, direction: 'up
     const swapIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1;
 
     if (swapIndex < 0 || swapIndex >= siblings.length) {
-        // Cannot move further
         return NextResponse.json({ message: 'Already at limit' });
     }
 
@@ -105,26 +95,18 @@ async function handleReorderNode(storyId: string, nodeId: string, direction: 'up
         return NextResponse.json({ error: 'Sibling to swap not found' }, { status: 500 });
     }
 
-    // Swap position values at levelIndex
-    const nodePosVal = node.position[levelIndex] ?? 0;
-    const siblingPosVal = siblingToSwap.position[levelIndex] ?? 0;
+    // Swap orderKeys
+    const nodeKey = node.orderKey;
+    const siblingKey = siblingToSwap.orderKey;
 
-    const newNodePos = [...node.position];
-    newNodePos[levelIndex] = siblingPosVal;
-
-    const newSiblingPos = [...siblingToSwap.position];
-    newSiblingPos[levelIndex] = nodePosVal;
-
-
-    // Transaction
     await prisma.$transaction([
         prisma.timeline.update({
             where: { id: node.id },
-            data: { position: newNodePos },
+            data: { orderKey: siblingKey },
         }),
         prisma.timeline.update({
             where: { id: siblingToSwap.id },
-            data: { position: newSiblingPos },
+            data: { orderKey: nodeKey },
         }),
     ]);
 
@@ -140,50 +122,54 @@ async function handleInsertSibling(storyId: string, targetNodeId: string, positi
         return NextResponse.json({ error: 'Target node not found' }, { status: 404 });
     }
 
-    const { parentId, level } = targetNode;
-    // We typically can't insert a sibling for the Root (Level 1) if it's unique, but the logic allows multiple Level 1s?
-    // The schema says @@unique([storyId, position]).
-    // Usually a story has one root, but let's assume we can insert if multiple are allowed or we are shifting.
-    // Actually, usually Level 1 is unique per story in many models, but here it seems we are just shifting 'position'.
+    const { parentId, level, orderKey: targetOrderKey } = targetNode;
 
-    const levelIndex = level - 1;
+    // Find neighbor to calculate midpoint
+    let neighborOrderKey: Prisma.Decimal | null = null;
 
-    // Get all siblings to shift them
-    const siblings = await prisma.timeline.findMany({
-        where: {
-            storyId,
-            parentId: parentId,
-            level: level,
-        },
-    });
-
-    // Sort
-    siblings.sort((a, b) => (a.position[levelIndex] ?? 0) - (b.position[levelIndex] ?? 0));
-
-    const targetIndex = siblings.findIndex(s => s.id === targetNodeId);
-    let insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-
-    // We need to create a gap or just renumber everything from insertIndex onwards.
-    // Simplest is to Max+1 and append? No, we want specific position.
-    // Renumbering is safer to ensure consistency.
-
-    // Let's re-assign positions for all siblings + new one
-    // New node object placeholder
-    const newNodeTemp = { id: 'NEW_NODE' };
-    const newOrderList = [...siblings];
-    newOrderList.splice(insertIndex, 0, newNodeTemp as any);
-
-    // We need to calculate the actual position vector for the new node.
-    // It should inherit parent position parts.
-    let parentPos = [0, 0, 0, 0, 0];
-    if (parentId) {
-        const parent = await prisma.timeline.findUnique({ where: { id: parentId } });
-        if (parent) parentPos = parent.position;
+    if (position === 'before') {
+        // Find immediate predecessor
+        const prev = await prisma.timeline.findFirst({
+            where: {
+                storyId,
+                parentId,
+                level,
+                orderKey: { lt: targetOrderKey },
+            },
+            orderBy: { orderKey: 'desc' },
+        });
+        if (prev) neighborOrderKey = prev.orderKey;
     } else {
-        // If Root, basic position is 0s
+        // Find immediate successor
+        const next = await prisma.timeline.findFirst({
+            where: {
+                storyId,
+                parentId,
+                level,
+                orderKey: { gt: targetOrderKey },
+            },
+            orderBy: { orderKey: 'asc' },
+        });
+        if (next) neighborOrderKey = next.orderKey;
     }
 
-    // We also need config to get the name
+    // Calculate new key
+    let newOrderKey: Prisma.Decimal;
+    const spacing = new Prisma.Decimal(1000);
+
+    if (neighborOrderKey) {
+        // Midpoint
+        newOrderKey = targetOrderKey.add(neighborOrderKey).div(2);
+    } else {
+        // No neighbor in that direction (start or end)
+        if (position === 'before') {
+            newOrderKey = targetOrderKey.sub(spacing);
+        } else {
+            newOrderKey = targetOrderKey.add(spacing);
+        }
+    }
+
+    // Get config for naming (simplified)
     const config = await prisma.timelineConfig.findUnique({ where: { storyId } });
     let levelName = 'Level ' + level;
     if (config) {
@@ -194,84 +180,17 @@ async function handleInsertSibling(storyId: string, targetNodeId: string, positi
         else if (level === 5) levelName = config.level5Name || levelName;
     }
 
-    const updates = [];
-    let newNodeResult = null;
+    // No number in name
+    const generatedName = levelName;
 
-    // We can't easily renumber ALL in one go without potential unique constraint violations on [storyId, position].
-    // Strategy: 
-    // 1. Move everything that needs moving to a temporary negative or high space? 
-    // OR: just update assuming we can avoid collision.
-    // Better: Update from end to start to avoid collision if shifting UP?
-    // Actually, if we just inserting ONE, we can find the max and append, but the user wants "Insert Above/Below".
-
-    // Let's try: Update positions loop.
-    // Uniqueness is on `position` (Int[]).
-    // Prisma doesn't support deferred constraints easily.
-
-    // Workaround:
-    // We will update the `position` of the new node to be correct.
-    // But we first need to shift the existing ones.
-    // Query all siblings that are >= insertIndex and shift them +1.
-    // To avoid collision, we should do it from highest to lowest.
-
-    const siblingsToShift = siblings.slice(insertIndex).reverse(); // process from end
-
-    // Transactional op
-    /*
-        Problem: We need to shift index `i` to `i+1`. 
-        If we have 1, 2, 3. Insert at 2.
-        3 -> 4. 2 -> 3. New -> 2.
-        If we do 3->4, that spot 4 is free. 
-        So reverse order IS safe.
-    */
-
-    // 1. Shift existing
-    for (const sib of siblingsToShift) {
-        const oldPos = sib.position;
-        const newPos = [...oldPos];
-        newPos[levelIndex] = (newPos[levelIndex] ?? 0) + 1; // Increment this level's index
-
-        updates.push(
-            prisma.timeline.update({
-                where: { id: sib.id },
-                data: { position: newPos },
-            })
-        );
-    }
-
-    // 2. Create new node
-    // It will take the position calculated from the insertIndex + (start offset?)
-    // Actually, we should not just rely on array index, we should look at the values.
-    // But normalized, typical 1,2,3...
-    // Let's assume the siblings list was contiguous or we simply want to place it at `siblings[targetIndex].position + (after?1:0)`.
-    // But if we shift, we make space.
-
-    // Let's define the new position value.
-    // If inserting before: value = targetNode.position[levelIndex].
-    // If inserting after: value = targetNode.position[levelIndex] + 1.
-
-    const targetPosValue = targetNode.position[levelIndex] ?? 0;
-    const newPosValue = position === 'before' ? targetPosValue : targetPosValue + 1;
-
-    const newNodePosition = [...targetNode.position]; // Inherit parent path (which is same as sibling)
-    // but ensure children levels are 0
-    for (let i = levelIndex + 1; i < 5; i++) newNodePosition[i] = 0;
-
-    newNodePosition[levelIndex] = newPosValue;
-
-    // Prepare creation
-    const generatedName = `${levelName} #${newPosValue}`; // This might be duplicate if we don't fix names, but name is not unique. 
-    // Ideally we re-generate names too? The user prompt didn't strictly ask to re-name everything.
-
-    const createOp = prisma.timeline.create({
+    const newNode = await prisma.timeline.create({
         data: {
             storyId,
             parentId,
             level,
-            position: newNodePosition,
+            orderKey: newOrderKey,
             name: generatedName,
             title: title || '',
-            // Create implicitly empty note too?
             notes: {
                 create: {
                     storyId,
@@ -282,14 +201,5 @@ async function handleInsertSibling(storyId: string, targetNodeId: string, positi
         }
     });
 
-    // Execute
-    // Note: We might still hit collision if we don't shift first.
-    // Prisma transaction processes sequentially? Yes.
-
-    await prisma.$transaction([
-        ...updates,
-        createOp
-    ]);
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, node: newNode });
 }

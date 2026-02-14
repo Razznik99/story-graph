@@ -481,7 +481,7 @@ export async function POST(req: Request) {
                     title: '',
                     name: 'Story', // Root node name
                     level: 1,
-                    position: [0, 0, 0, 0, 0],
+                    orderKey: 1000,
                 }
             });
 

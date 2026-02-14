@@ -1,4 +1,5 @@
-import { Timeline, Event } from './timeline-api';
+import { Timeline, Event, TimelineConfig } from './timeline-api';
+import { getDerivedNumber } from '@/components/timeline/timeline-explorer-helpers';
 
 export type LayoutItemType = 'event' | 'divider' | 'levelName' | 'label' | 'subLevel' | 'navigation';
 
@@ -47,7 +48,8 @@ interface TreeNode extends Timeline {
 export function calculateSingleLevelLayout(
     currentLevelId: string | null,
     nodes: Timeline[],
-    events: Event[]
+    events: Event[],
+    config: TimelineConfig
 ): LayoutItem[] {
     if (!currentLevelId) return [];
 
@@ -70,11 +72,9 @@ export function calculateSingleLevelLayout(
     });
 
     const sortNodes = (n: TreeNode[]) => n.sort((a, b) => {
-        const len = Math.min(a.position.length, b.position.length);
-        for (let i = 0; i < len; i++) {
-            if ((a.position[i] ?? 0) !== (b.position[i] ?? 0)) return (a.position[i] ?? 0) - (b.position[i] ?? 0);
-        }
-        return a.position.length - b.position.length;
+        const keyA = Number(a.orderKey ?? 0);
+        const keyB = Number(b.orderKey ?? 0);
+        return keyA - keyB;
     });
 
     // 2. Identify Current Context
@@ -155,13 +155,12 @@ export function calculateSingleLevelLayout(
     // Secondary Divider @ +2*GAP.
     // Second Level (Index 1) @ +3*GAP.
     // Pos(i) = GAP + (i * 2 * GAP).
+    // Sublevels (Positive X)
     if (hasLevels) {
         currentNode.children.forEach((child, idx) => {
             const xPos = CONSTANTS.GAP + (idx * 2 * CONSTANTS.GAP);
 
-            // Secondary Divider BEFORE this level? No, "in between".
-            // So logic: Item ... Div ... Item.
-            // If idx > 0, insert divider at xPos - GAP.
+            // Secondary Divider
             if (idx > 0) {
                 items.push({
                     id: `div-sec-${currentNode.id}-${idx}`,
@@ -173,13 +172,15 @@ export function calculateSingleLevelLayout(
                 });
             }
 
+            const derivedNum = getDerivedNumber(child, nodes, config);
+
             items.push({
                 id: child.id,
                 type: 'subLevel',
                 x: xPos,
                 y: LANES.LEVEL,
-                label: `${idx + 1}`,
-                subLabel: child.title || child.name,
+                label: `${derivedNum}`,
+                subLabel: child.title ? `${child.name} ${derivedNum} - ${child.title}` : `${child.name} ${derivedNum}`,
                 data: child
             });
 
@@ -235,25 +236,39 @@ export function calculateSingleLevelLayout(
     // --- NAVIGATION ---
 
     // Nav Start (Left of Left Divider)
+    let prevLabel = 'Start';
+    if (prevSibling) {
+        const num = getDerivedNumber(prevSibling, nodes, config);
+        const name = prevSibling.title || prevSibling.name;
+        prevLabel = `${name} ${num}`;
+    }
+
     items.push({
         id: prevSibling ? prevSibling.id : 'nav-start',
         type: 'navigation',
         navDirection: 'prev',
         x: divLeftX - CONSTANTS.GAP,
         y: LANES.LEVEL,
-        label: prevSibling ? (prevSibling.title || prevSibling.name) : 'Start',
+        label: prevLabel,
         data: prevSibling,
         isPlaceholder: !prevSibling
     });
 
     // Nav End (Right of Right Divider)
+    let nextLabel = 'End';
+    if (nextSibling) {
+        const num = getDerivedNumber(nextSibling, nodes, config);
+        const name = nextSibling.title || nextSibling.name;
+        nextLabel = `${name} ${num}`;
+    }
+
     items.push({
         id: nextSibling ? nextSibling.id : 'nav-end',
         type: 'navigation',
         navDirection: 'next',
         x: divRightX + CONSTANTS.GAP,
         y: LANES.LEVEL,
-        label: nextSibling ? (nextSibling.title || nextSibling.name) : 'End',
+        label: nextLabel,
         data: nextSibling,
         isPlaceholder: !nextSibling
     });

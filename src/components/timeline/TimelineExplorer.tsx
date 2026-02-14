@@ -48,6 +48,7 @@ import {
     buildIndex,
     nextLevels,
     getLevelName,
+    getDerivedNumber,
     type NodeIndex,
 } from './timeline-explorer-helpers';
 
@@ -74,6 +75,7 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { INTENSITY_COLORS } from '@/domain/constants';
+import { useTimelineStore } from '@/store/useTimelineStore';
 
 type ExpandMap = Record<string, boolean>;
 type EditingMap = Record<string, boolean>;
@@ -328,6 +330,7 @@ export default function TimelineExplorer() {
                                 }
                             }}
                             getSiblings={getSiblings}
+                            nodes={nodes}
                             isRoot={true}
                         />
                     </div>
@@ -398,7 +401,7 @@ interface TreeNodeProps {
     onMoveEventToNode: (ev: PlacedEvent, nodeId: string) => void;
     onUnplaceEvent: (ev: PlacedEvent) => void;
     onDeleteEvent: (ev: PlacedEvent) => void;
-
+    nodes: TLNode[];
     getSiblings: (nodeId: string) => { parentId: string | null; siblings: TLNode[]; idx: number };
     isRoot?: boolean;
 }
@@ -424,12 +427,14 @@ function TreeNode({
     onMoveEventToNode,
     onUnplaceEvent,
     onDeleteEvent,
+    nodes,
     getSiblings,
     isRoot = false,
 }: TreeNodeProps) {
     const children = byParent.get(node.id) || [];
     const isOpen = expanded[node.id] ?? true;
     const [draft, setDraft] = React.useState(node.title ?? '');
+    const { setCurrentLevelId } = useTimelineStore();
 
     React.useEffect(() => setDraft(node.title ?? ''), [node.title]);
 
@@ -453,7 +458,13 @@ function TreeNode({
 
     // Use name or formatted level name
     const levelName = node.name || getLevelName(node.level, cfg);
-    const displayName = node.title ? `${levelName} — ${node.title}` : levelName;
+    const orderNum = getDerivedNumber(node, nodes, cfg);
+
+    // Condition: Single Timeline Level 1 -> No Number
+    const isSingleRoot = cfg.timelineType === 'single' && node.level === 1;
+    const baseName = isSingleRoot ? levelName : `${levelName} ${orderNum}`;
+
+    const displayName = node.title ? `${baseName} — ${node.title}` : baseName;
     const hasChildren = children.length > 0;
     const hasEvents = events.length > 0;
 
@@ -509,7 +520,7 @@ function TreeNode({
                                     <FolderPen className="h-3 w-3" />
                                     Rename
                                 </DropdownMenuItem>
-                                <DropdownMenuItem disabled>
+                                <DropdownMenuItem onClick={() => setCurrentLevelId(node.id)}>
                                     <SquareArrowOutUpRight className="h-3 w-3" />
                                     Go To (Canvas)
                                 </DropdownMenuItem>
@@ -695,6 +706,7 @@ function TreeNode({
                             onMoveEventToNode={onMoveEventToNode}
                             onUnplaceEvent={onUnplaceEvent}
                             onDeleteEvent={onDeleteEvent}
+                            nodes={nodes}
                             getSiblings={getSiblings}
                         />
                     ))}

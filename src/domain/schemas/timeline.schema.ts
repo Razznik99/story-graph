@@ -21,7 +21,7 @@ export const TimelineSchema = z.object({
     id: z.string().uuid(),
     storyId: z.string().uuid(),
     parentId: z.string().uuid().nullable(),
-    position: z.array(z.number().int()),
+    orderKey: z.string().or(z.number()), // Decimal serialized
     name: z.string().default(""),
     title: z.string().nullable(),
     level: z.number().int(),

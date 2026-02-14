@@ -92,23 +92,23 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             return NextResponse.json({ error: permission.error }, { status: permission.status || 403 });
         }
 
-        // Find all descendant timeline nodes.
-        const allNodesForStory = await prisma.timeline.findMany({
-            where: { storyId: existingNode.storyId },
-            select: { id: true, position: true },
-        });
+        // Find all descendant timeline nodes iteratively
+        // Level is at most 5, so this loop is shallow.
+        let descendantIds = [id];
+        let currentLevelIds = [id];
 
-        const prefix = existingNode.position ?? [];
-        const descendantIds = allNodesForStory
-            .filter((n) => {
-                const pos = n.position ?? [];
-                if (pos.length < prefix.length) return false;
-                for (let i = 0; i < prefix.length; i++) {
-                    if (pos[i] !== prefix[i]) return false;
-                }
-                return true;
-            })
-            .map((n) => n.id);
+        while (currentLevelIds.length > 0) {
+            const children = await prisma.timeline.findMany({
+                where: { parentId: { in: currentLevelIds } },
+                select: { id: true },
+            });
+
+            if (children.length === 0) break;
+
+            const childIds = children.map(c => c.id);
+            descendantIds = [...descendantIds, ...childIds];
+            currentLevelIds = childIds;
+        }
 
         // Find the root node (level 1, no parent) for this story
         const rootNode = await prisma.timeline.findFirst({
@@ -116,10 +116,9 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
             select: { id: true },
         });
 
-        // Move all events from descendant nodes to the root node
+        // Move all events from descendant nodes to the root node (or unlink if root is being deleted)
         if (rootNode) {
-            // Avoid moving events if the root node itself is being deleted (conceptually root node is in descendantIds if id target is root)
-            // If we are deleting the ROOT, we just unlink.
+            // Avoid moving events if the root node itself is being deleted
             const targetId = descendantIds.includes(rootNode.id) ? null : rootNode.id;
 
             await prisma.event.updateMany({
@@ -140,9 +139,40 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
         });
 
         // Delete all descendant nodes (including the target node itself)
-        await prisma.timeline.deleteMany({
+        // Order doesn't matter for deleteMany?
+        // Actually, foreign keys might complain if we delete parent before child?
+        // prisma handles cascade if configured?
+        // Schema: parent   Timeline?  @relation("TimelineTree", fields: [parentId], references: [id])
+        // It doesn't say "onDelete: Cascade" in the schema for `parent`.
+        // So we must delete children first (reverse order of discovery? or specific level order?)
+        // Or just `deleteMany`? Prisma `deleteMany` doesn't guarantee order.
+        // If no Cascade, we MUST delete from bottom up.
+        // We have `descendantIds`. We should delete in reverse level order?
+        // Constructing layers was useful.
+        // Let's re-do the loop to keep layers.
+
+        // Actually, let's just use `deleteMany` but we might hit constraint errors?
+        // If I delete a parent, and child references it...
+        // Schema says: `parentId String?` ... `references: [id])` -> SetNull? No, default is NoAction?
+        // If it's restrictive, we must delete children first.
+
+        // Let's assume we need to delete children first.
+        // Filter `descendantIds` by level? We didn't fetch level.
+        // Let's fetch level too.
+
+        const nodesToDelete = await prisma.timeline.findMany({
             where: { id: { in: descendantIds } },
+            select: { id: true, level: true },
+            orderBy: { level: 'desc' }, // Delete from deepest level up
         });
+
+        const deleteIds = nodesToDelete.map(n => n.id);
+
+        if (deleteIds.length > 0) {
+            await prisma.timeline.deleteMany({
+                where: { id: { in: deleteIds } },
+            });
+        }
 
         return new NextResponse(null, { status: 204 });
     } catch (error) {

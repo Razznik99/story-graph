@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listTLNodes, TLNode } from '@/lib/timeline-api';
+import { buildIndex, getNodeOrder } from '../timeline/timeline-explorer-helpers';
 
 interface TimelinePathProps {
     storyId: string;
@@ -17,11 +18,11 @@ export default function TimelinePath({ storyId, timelineId, className = '' }: Ti
         staleTime: 60 * 1000, // 1 minute
     });
 
-    // Build map
-    const nodeMap = useMemo(() => {
+    // Build map and index
+    const { nodeMap, byParent } = useMemo(() => {
         const map = new Map<string, TLNode>();
         nodes.forEach(n => map.set(n.id, n));
-        return map;
+        return { nodeMap: map, byParent: buildIndex(nodes) };
     }, [nodes]);
 
     // Construct path
@@ -43,15 +44,18 @@ export default function TimelinePath({ storyId, timelineId, className = '' }: Ti
         if (path.length === 0) return null;
 
         return path.map((node, index) => {
+            const order = getNodeOrder(node.id, byParent, nodes);
+            const nameWithOrder = `${node.name} ${order}`;
+
             // Only the current position (last item) displays the title
             if (index === path.length - 1) {
-                return node.title ? `${node.name} - ${node.title}` : node.name;
+                return node.title ? `${nameWithOrder} - ${node.title}` : nameWithOrder;
             }
 
             // Ancestors display only the node name
-            return node.name;
+            return nameWithOrder;
         }).join('  >  ');
-    }, [timelineId, nodeMap]);
+    }, [timelineId, nodeMap, byParent, nodes]);
 
     if (!pathString) return null;
 
