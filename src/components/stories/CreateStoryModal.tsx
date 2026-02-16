@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import TagInput from '@/components/TagInput';
+import ImageUpload from '@/components/ImageUpload';
 import GenrePicker from '@/components/GenrePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -273,13 +274,10 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="coverUrl" className="text-text-secondary">Cover URL</Label>
-                            <Input
-                                id="coverUrl"
+                            <Label className="text-text-secondary">Cover Image</Label>
+                            <ImageUpload
                                 value={coverUrl}
-                                onChange={(e) => setCoverUrl(e.target.value)}
-                                placeholder="https://..."
-                                className="bg-surface border-border focus-within:ring-accent"
+                                onChange={(url) => setCoverUrl(url || '')}
                             />
                         </div>
                     </div>

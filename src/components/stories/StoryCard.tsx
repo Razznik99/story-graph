@@ -26,7 +26,7 @@ interface StoryCardProps {
 
 export default function StoryCard({ story, variant, onClick }: StoryCardProps) {
     const role = variant === 'my-stories'
-        ? (story.collaborators && story.collaborators.length > 0 ? story.collaborators[0].role : 'Owner')
+        ? (story.collaborators && story.collaborators.length > 0 ? story.collaborators[0]?.role : 'Owner')
         : null;
 
     const ownerName = story.owner?.username || story.owner?.email || 'Unknown';

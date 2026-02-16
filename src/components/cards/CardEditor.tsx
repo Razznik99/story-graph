@@ -4,7 +4,8 @@ import { CollaborationRole } from '@/domain/roles';
 import AttributeField from './AttributeField';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import TagInput from '../TagInput';
-import { Plus, Image as ImageIcon, Trash2, AlertCircle, Loader2, Star, StarOff, GitGraph, GitCompareArrows, Trash } from 'lucide-react';
+import ImageUpload from '../ImageUpload';
+import { Plus, Trash2, AlertCircle, Loader2, Star, StarOff, GitGraph, GitCompareArrows, Trash } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -388,18 +389,11 @@ export default function CardEditor({
 
             {/* Media & Tags */}
             <div className="space-y-2">
-                <Label htmlFor="imageUrl" className="text-text-secondary">Image URL</Label>
-                <div className="relative">
-                    <ImageIcon className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                    <Input
-                        id="imageUrl"
-                        name="imageUrl"
-                        value={formData.imageUrl}
-                        onChange={handleTextChange}
-                        className="bg-surface border-border focus-within:ring-accent pl-9"
-                        placeholder="https://..."
-                    />
-                </div>
+                <Label className="text-text-secondary">Image</Label>
+                <ImageUpload
+                    value={formData.imageUrl}
+                    onChange={(url) => setFormData(prev => ({ ...prev, imageUrl: url || '' }))}
+                />
             </div>
             <div className="space-y-2">
                 <Label className="text-text-secondary">Tags</Label>
