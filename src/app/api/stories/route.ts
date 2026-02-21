@@ -488,7 +488,7 @@ export async function POST(req: Request) {
             // Create default Note for the root timeline node
             await tx.note.create({
                 data: {
-                    title: 'Story Note',
+                    title: 'Story',
                     content: '',
                     storyId: newStory.id,
                     timelineId: rootTimelineNode.id,

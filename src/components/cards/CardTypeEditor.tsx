@@ -4,9 +4,11 @@
 import { useEffect, useState } from "react";
 import { AttributeDefinition, CardType } from "@prisma/client";
 import { toast } from "sonner";
-import { Loader2, Plus, Pencil, Trash2, LayoutTemplate } from "lucide-react";
+import { Loader2, Plus, Pencil, Trash2, LayoutTemplate, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { SearchableSelect } from "@/components/ui/searchable-select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -51,6 +53,7 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
     const [cardType, setCardType] = useState<CardType | null>(null);
     const [attributes, setAttributes] = useState<AttributeDefinition[]>([]);
     const [layoutItems, setLayoutItems] = useState<LayoutItem[]>([]);
+    const [allCardTypes, setAllCardTypes] = useState<CardType[]>([]);
 
     // Form States
     const [name, setName] = useState("");
@@ -72,9 +75,11 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [typeRes, attrsRes] = await Promise.all([
+            const [typeRes, attrsRes, allTypesRes] = await Promise.all([
                 fetch(`/api/card-types/${cardTypeId}`),
-                fetch(`/api/card-types/attributes?cardTypeId=${cardTypeId}`)
+                fetch(`/api/card-types/attributes?cardTypeId=${cardTypeId}`),
+                // Since this component might not have all card types, we fetch them to list allowedCardTypes
+                fetch(`/api/card-types${cardType?.storyId ? `?storyId=${cardType.storyId}` : ''}`)
             ]);
 
             if (!typeRes.ok || !attrsRes.ok) throw new Error("Failed to fetch data");
@@ -82,8 +87,20 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
             const typeData = await typeRes.json();
             const attrsData = await attrsRes.json();
 
+            // Re-fetch all types now that we have the storyId if the first attempt lacked it, 
+            // or we could just use a known storyId context. However, CardTypeEditor gets cardTypeId, 
+            // so we can use typeData.storyId.
+            let typesData = [];
+            if (typeData.storyId) {
+                const typesRes2 = await fetch(`/api/card-types?storyId=${typeData.storyId}`);
+                if (typesRes2.ok) {
+                    typesData = await typesRes2.json();
+                }
+            }
+
             setCardType(typeData);
             setAttributes(attrsData);
+            setAllCardTypes(typesData);
             setName(typeData.name);
             setDescription(typeData.description || "");
 
@@ -291,23 +308,23 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
                         </span>
                     </div>
 
-                    <Sheet open={isAttrSheetOpen} onOpenChange={setIsAttrSheetOpen}>
-                        <SheetTrigger asChild>
+                    <Dialog open={isAttrSheetOpen} onOpenChange={setIsAttrSheetOpen}>
+                        <DialogTrigger asChild>
                             <Button className="gap-2" onClick={() => {
                                 setEditingAttrId(null);
                                 setAttrForm({ name: "", description: "", attrType: "Text", config: {} });
                             }}>
                                 <Plus size={16} /> Add Attribute
                             </Button>
-                        </SheetTrigger>
-                        <SheetContent>
-                            <SheetHeader>
-                                <SheetTitle>{editingAttrId ? 'Edit Attribute' : 'Add New Attribute'}</SheetTitle>
-                                <SheetDescription>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                                <DialogTitle>{editingAttrId ? 'Edit Attribute' : 'Add New Attribute'}</DialogTitle>
+                                <DialogDescription>
                                     Define the data field for this card type.
-                                </SheetDescription>
-                            </SheetHeader>
-                            <div className="space-y-6 py-6">
+                                </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-6 py-4">
                                 <div className="space-y-2">
                                     <Label>Name</Label>
                                     <Input
@@ -327,7 +344,7 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
                                         <SelectTrigger>
                                             <SelectValue />
                                         </SelectTrigger>
-                                        <SelectContent>
+                                        <SelectContent className="bg-background">
                                             {['Text', 'Number', 'UnitNumber', 'Option', 'MultiOption', 'Link', 'MultiLink'].map(t => (
                                                 <SelectItem key={t} value={t}>{t}</SelectItem>
                                             ))}
@@ -342,17 +359,128 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
                                         placeholder="Helper text for the user..."
                                     />
                                 </div>
+
+                                {/* Dynamic Config Fields */}
+                                {attrForm.attrType === 'UnitNumber' && (
+                                    <div className="space-y-2 border-t pt-4 mt-4">
+                                        <Label>Unit</Label>
+                                        <Input
+                                            value={attrForm.config.unit || ''}
+                                            onChange={e => setAttrForm({ ...attrForm, config: { ...attrForm.config, unit: e.target.value } })}
+                                            placeholder="e.g. kg, ft, meters"
+                                        />
+                                        <p className="text-xs text-muted-foreground">The unit label displayed next to the number.</p>
+                                    </div>
+                                )}
+
+                                {(attrForm.attrType === 'Option' || attrForm.attrType === 'MultiOption') && (
+                                    <div className="space-y-2 border-t pt-4 mt-4">
+                                        <Label>Options</Label>
+                                        <div className="flex gap-2">
+                                            <Input
+                                                id="new-option-input"
+                                                placeholder="Add an option..."
+                                                onKeyDown={e => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const val = (e.target as HTMLInputElement).value.trim();
+                                                        if (val && !(attrForm.config.options || []).includes(val)) {
+                                                            setAttrForm({
+                                                                ...attrForm,
+                                                                config: { ...attrForm.config, options: [...(attrForm.config.options || []), val] }
+                                                            });
+                                                            setTimeout(() => {
+                                                                (document.getElementById('new-option-input') as HTMLInputElement).value = '';
+                                                            }, 0);
+                                                        }
+                                                    }
+                                                }}
+                                            />
+                                            <Button type="button" variant="secondary" onClick={() => {
+                                                const input = document.getElementById('new-option-input') as HTMLInputElement;
+                                                const val = input.value.trim();
+                                                if (val && !(attrForm.config.options || []).includes(val)) {
+                                                    setAttrForm({
+                                                        ...attrForm,
+                                                        config: { ...attrForm.config, options: [...(attrForm.config.options || []), val] }
+                                                    });
+                                                    input.value = '';
+                                                }
+                                            }}>Add</Button>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2 mt-2">
+                                            {(attrForm.config.options || []).map((opt: string) => (
+                                                <Badge key={opt} variant="secondary" className="gap-1 pr-1">
+                                                    {opt}
+                                                    <button onClick={() => {
+                                                        setAttrForm({
+                                                            ...attrForm,
+                                                            config: { ...attrForm.config, options: attrForm.config.options.filter((o: string) => o !== opt) }
+                                                        });
+                                                    }} className="hover:text-destructive">
+                                                        <X size={14} />
+                                                    </button>
+                                                </Badge>
+                                            ))}
+                                            {(!attrForm.config.options || attrForm.config.options.length === 0) && (
+                                                <span className="text-xs text-muted-foreground">No options defined yet.</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {(attrForm.attrType === 'Link' || attrForm.attrType === 'MultiLink') && (
+                                    <div className="space-y-2 border-t pt-4 mt-4">
+                                        <Label>Allowed Card Types</Label>
+                                        <p className="text-xs text-muted-foreground mb-2">Limit which types of cards can be linked. Leave empty to allow any card type.</p>
+
+                                        <div className="flex flex-wrap gap-2 mb-2">
+                                            {(attrForm.config.allowedCardTypes || []).map((typeId: string) => {
+                                                const t = allCardTypes.find(ct => ct.id === typeId);
+                                                return (
+                                                    <Badge key={typeId} variant="outline" className="gap-1 pr-1">
+                                                        {t?.name || `Type: ${typeId.substring(0, 8)}...`}
+                                                        <button onClick={() => {
+                                                            setAttrForm({
+                                                                ...attrForm,
+                                                                config: { ...attrForm.config, allowedCardTypes: attrForm.config.allowedCardTypes.filter((id: string) => id !== typeId) }
+                                                            });
+                                                        }} className="hover:text-destructive">
+                                                            <X size={14} />
+                                                        </button>
+                                                    </Badge>
+                                                )
+                                            })}
+                                        </div>
+
+                                        <SearchableSelect
+                                            options={allCardTypes.filter(ct => !(attrForm.config.allowedCardTypes || []).includes(ct.id)).map(ct => ({ label: ct.name, value: ct.id }))}
+                                            value={null}
+                                            onChange={(val) => {
+                                                if (val && !(attrForm.config.allowedCardTypes || []).includes(val)) {
+                                                    setAttrForm({
+                                                        ...attrForm,
+                                                        config: { ...attrForm.config, allowedCardTypes: [...(attrForm.config.allowedCardTypes || []), val] }
+                                                    });
+                                                }
+                                            }}
+                                            placeholder="Add allowed type..."
+                                            searchPlaceholder="Search card types..."
+                                            fullWidth
+                                            resetAfterSelect
+                                        />
+                                    </div>
+                                )}
+
                             </div>
-                            <SheetFooter>
-                                <SheetClose asChild>
-                                    <Button variant="outline">Cancel</Button>
-                                </SheetClose>
+                            <DialogFooter>
+                                <Button variant="outline" onClick={() => setIsAttrSheetOpen(false)}>Cancel</Button>
                                 <Button onClick={handleCreateOrUpdateAttribute}>
                                     {editingAttrId ? 'Update Attribute' : 'Create Attribute'}
                                 </Button>
-                            </SheetFooter>
-                        </SheetContent>
-                    </Sheet>
+                            </DialogFooter>
+                        </DialogContent>
+                    </Dialog>
                 </div>
 
                 <div className="rounded-lg border border-border bg-surface/30 overflow-x-auto">

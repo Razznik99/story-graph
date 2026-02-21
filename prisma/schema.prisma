@@ -213,6 +213,8 @@ model User {
 
   aiProvider AIProvider?
   apiKey     String? // Encrypted (conceptually, for now plain text per plan)
+  
+  aiChats    AIChat[]
 }
 
 model Story {
@@ -252,6 +254,7 @@ model Story {
   NoteNoteLink     NoteNoteLink[]
   Tag              Tag[]
   identities       Identity[]
+  aiChats          AIChat[]
 
   @@unique([ownerId, title])
   @@unique([ownerId, abbreviation])
@@ -595,6 +598,40 @@ model AnalysisReport {
   createdAt DateTime @default(now())
 
   @@index([storyId, createdAt])
+}
+
+model AIChat {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId   String?  // Optional: Link chat to a specific story context
+  story     Story?   @relation(fields: [storyId], references: [id], onDelete: SetNull)
+
+  title     String   @db.VarChar(200) @default("New Chat")
+  
+  messages  AIMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([storyId])
+}
+
+model AIMessage {
+  id        String   @id @default(uuid())
+  chatId    String
+  chat      AIChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  role      String   // "user" | "assistant" | "system"
+  content   String   @db.Text
+  
+  // Optional: Metadata for things like referenced entities in this message
+  metadata  Json?    
+
+  createdAt DateTime @default(now())
+
+  @@index([chatId])
 }
 
 model Note {

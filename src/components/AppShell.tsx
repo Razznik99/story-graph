@@ -20,6 +20,7 @@ import {
 import { useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useTheme } from '@/providers/ThemeProvider';
+import { AIPopover } from './ai/AIPopover';
 
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -142,6 +143,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             {/* Added ml-16 to offset the fixed collapsed sidebar width */}
             <main className="flex-1 ml-16 bg-background/50 relative min-h-screen">
                 {children}
+                <AIPopover />
             </main>
         </div>
     );

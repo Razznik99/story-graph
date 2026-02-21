@@ -64,7 +64,7 @@ export default function StoryNoteList({ storyId, onSelectNote }: StoryNoteListPr
                     <div className="flex gap-2 pb-2 overflow-x-auto no-scrollbar">
                         <Badge
                             variant={selectedLevel === null ? "default" : "outline"}
-                            className="cursor-pointer whitespace-nowrap"
+                            className={cn("cursor-pointer whitespace-nowrap", selectedLevel === null ? "bg-accent" : "")}
                             onClick={() => setSelectedLevel(null)}
                         >
                             All Levels
@@ -73,8 +73,7 @@ export default function StoryNoteList({ storyId, onSelectNote }: StoryNoteListPr
                             <Badge
                                 key={level}
                                 variant={selectedLevel === level ? "default" : "outline"}
-                                className="cursor-pointer whitespace-nowrap"
-                                onClick={() => setSelectedLevel(level)}
+                                className={cn("cursor-pointer whitespace-nowrap", selectedLevel === level ? "bg-accent" : "")} onClick={() => setSelectedLevel(level)}
                             >
                                 Level {level}
                             </Badge>
@@ -84,62 +83,60 @@ export default function StoryNoteList({ storyId, onSelectNote }: StoryNoteListPr
             </div>
 
             {/* List */}
-            <ScrollArea className="flex-1">
-                <div className="p-4 space-y-3">
-                    {isLoading && <div className="text-center text-muted-foreground p-4">Loading...</div>}
-                    {!isLoading && filteredNotes.length === 0 && (
-                        <div className="text-center text-muted-foreground p-8 border border-dashed border-border rounded-xl">
-                            No timeline notes found.
-                        </div>
-                    )}
-                    {filteredNotes.map(note => {
-                        // Format Title: (timeline.name - timeline.title) or ...
-                        // Note title is already formatted on backend sync usually, but we can display custom if needed.
-                        // But the note.title might have been user edited? 
-                        // Wait, "the title wouldnt be editable" for timeline notes.
-                        // So we trust note.title.
-                        // Or we use the timeline data to constructing display name?
-                        // "story tab would display the timeline notes with title(timeline name )"
-                        // "timeline name can either be in the format of (timeline.name - timeline.title) or ..."
-                        // Since `note.title` is synced with `timeline.name + title` in backend, we can just use `note.title`.
-                        // But requirements also say "timeline path".
+            <div className="p-4 space-y-3 overflow-y-auto">
+                {isLoading && <div className="text-center text-muted-foreground p-4">Loading...</div>}
+                {!isLoading && filteredNotes.length === 0 && (
+                    <div className="text-center text-muted-foreground p-8 border border-dashed border-border rounded-xl">
+                        No timeline notes found.
+                    </div>
+                )}
+                {filteredNotes.map(note => {
+                    // Format Title: (timeline.name - timeline.title) or ...
+                    // Note title is already formatted on backend sync usually, but we can display custom if needed.
+                    // But the note.title might have been user edited? 
+                    // Wait, "the title wouldnt be editable" for timeline notes.
+                    // So we trust note.title.
+                    // Or we use the timeline data to constructing display name?
+                    // "story tab would display the timeline notes with title(timeline name )"
+                    // "timeline name can either be in the format of (timeline.name - timeline.title) or ..."
+                    // Since `note.title` is synced with `timeline.name + title` in backend, we can just use `note.title`.
+                    // But requirements also say "timeline path".
 
-                        return (
-                            <div
-                                key={note.id}
-                                onClick={() => onSelectNote(note)}
-                                className="bg-surface border border-border rounded-xl p-4 hover:border-accent/50 cursor-pointer transition-colors group space-y-2"
-                            >
-                                <div className="flex justify-between items-start gap-2">
-                                    <div className="flex flex-col min-w-0">
-                                        <div className="flex items-center gap-2">
-                                            <Badge variant="outline" className="text-[10px] h-4 px-1 border-input">
-                                                L{note.timeline?.level}
-                                            </Badge>
-                                            <h3 className="font-semibold text-lg text-foreground group-hover:text-accent transition-colors truncate">{note.title}</h3>
-                                        </div>
-                                        {/* Timeline Path or Breadcrumb? */}
-                                        {/* Ideally we construct path from position, but we don't have full tree here easily. */}
-                                    </div>
-                                    <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{formatDistanceToNow(new Date(note.updatedAt))} ago</span>
-                                </div>
-
-                                <p className="text-sm text-muted-foreground line-clamp-2">
-                                    {getNotePreview(note.content)}
-                                </p>
-
-                                <div className="flex flex-wrap gap-2 pt-1">
-                                    {note.tags?.slice(0, 3).map((tag: string) => (
-                                        <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0 h-5 font-normal">
-                                            {tag}
+                    return (
+                        <div
+                            key={note.id}
+                            onClick={() => onSelectNote(note)}
+                            className="bg-surface border border-border rounded-xl p-4 hover:border-accent/50 cursor-pointer transition-colors group space-y-2"
+                        >
+                            <div className="flex justify-between items-start gap-2">
+                                <div className="flex flex-col min-w-0">
+                                    <div className="flex items-center gap-2">
+                                        <Badge variant="outline" className="text-[10px] h-4 px-1 border-input">
+                                            L{note.timeline?.level}
                                         </Badge>
-                                    ))}
+                                        <h3 className="font-semibold text-lg text-foreground group-hover:text-accent transition-colors truncate">{note.title}</h3>
+                                    </div>
+                                    {/* Timeline Path or Breadcrumb? */}
+                                    {/* Ideally we construct path from position, but we don't have full tree here easily. */}
                                 </div>
+                                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{formatDistanceToNow(new Date(note.updatedAt))} ago</span>
                             </div>
-                        );
-                    })}
-                </div>
-            </ScrollArea>
+
+                            <p className="text-sm text-muted-foreground line-clamp-2">
+                                {getNotePreview(note.content)}
+                            </p>
+
+                            <div className="flex flex-wrap gap-2 pt-1">
+                                {note.tags?.slice(0, 3).map((tag: string) => (
+                                    <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0 h-5 font-normal">
+                                        {tag}
+                                    </Badge>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })}
+            </div>
         </div>
     );
 }

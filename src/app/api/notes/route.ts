@@ -96,7 +96,6 @@ export async function GET(req: NextRequest) {
                         level: true,
                         name: true,
                         title: true, // Needed for display format
-                        position: true,
                     }
                 }
             }

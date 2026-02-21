@@ -29,7 +29,7 @@ interface Props {
 interface AttributeConfig {
     options?: string[];
     unit?: string;
-    cardTypeId?: string;
+    allowedCardTypes?: string[];
 }
 
 export default function AttributeField({
@@ -56,19 +56,16 @@ export default function AttributeField({
         ) {
             setLoading(true);
             let url = `/api/cards?storyId=${storyId}`;
-            // If config has cardTypeId, we could filter server side if API supports it,
-            // otherwise we filter client side. Assuming API might not support it yet,
-            // we'll filter client side for now, OR if the user implied the route supports it.
-            // But to be safe and efficient, let's fetch all and filter client side as requested.
+            // If config has allowedCardTypes, we filter client side.
             fetch(url)
                 .then((res) => res.json())
                 .then((data) => {
                     if (Array.isArray(data)) {
                         let filtered = data;
-                        if (config.cardTypeId) {
+                        if (config.allowedCardTypes && config.allowedCardTypes.length > 0) {
                             filtered = data.filter((c: any) =>
-                                c.cardTypeId === config.cardTypeId ||
-                                (c.cardType && c.cardType.id === config.cardTypeId)
+                                config.allowedCardTypes!.includes(c.cardTypeId) ||
+                                (c.cardType && config.allowedCardTypes!.includes(c.cardType.id))
                             );
                         }
                         setAvailableCards(filtered);
@@ -77,7 +74,7 @@ export default function AttributeField({
                 .catch((err) => console.error(err))
                 .finally(() => setLoading(false));
         }
-    }, [definition.attrType, storyId, config.cardTypeId]);
+    }, [definition.attrType, storyId, config.allowedCardTypes]);
 
     const handleUnitValueChange = (val: string | number, type: 'value' | 'unit') => {
         const current = (typeof value === 'object' && value) ? value : { value: 0, unit: config.unit || '' };

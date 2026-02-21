@@ -193,7 +193,7 @@ export async function PUT(req: Request) {
                 // Create default Note for the root timeline node
                 await tx.note.create({
                     data: {
-                        title: 'Story Note',
+                        title: updatedConfig.level1Name || 'Story',
                         content: '',
                         storyId: storyId,
                         timelineId: rootTimelineNode.id,

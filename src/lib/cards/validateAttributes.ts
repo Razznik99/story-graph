@@ -61,7 +61,34 @@ export function validateAttributes(
                     errors.push(`Attribute '${def.name}' has invalid option '${attr.value}'.`);
                 }
                 break;
-            // Add other types as needed
+            case 'MultiOption':
+                const multiOptions = (def.config as any)?.options;
+                if (!Array.isArray(attr.value)) {
+                    errors.push(`Attribute '${def.name}' expects an array of options.`);
+                } else if (Array.isArray(multiOptions)) {
+                    for (const val of attr.value) {
+                        if (!multiOptions.includes(val)) {
+                            errors.push(`Attribute '${def.name}' has invalid option '${val}'.`);
+                        }
+                    }
+                }
+                break;
+            case 'Link':
+                if (typeof attr.value !== 'string') {
+                    errors.push(`Attribute '${def.name}' expects a string value (card ID).`);
+                }
+                break;
+            case 'MultiLink':
+                if (!Array.isArray(attr.value)) {
+                    errors.push(`Attribute '${def.name}' expects an array of card IDs.`);
+                } else {
+                    for (const val of attr.value) {
+                        if (typeof val !== 'string') {
+                            errors.push(`Attribute '${def.name}' expects an array of string card IDs.`);
+                        }
+                    }
+                }
+                break;
         }
     }
 

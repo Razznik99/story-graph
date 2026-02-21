@@ -57,44 +57,42 @@ export default function NoteList({ storyId, onSelectNote }: NoteListProps) {
             </div>
 
             {/* List */}
-            <ScrollArea className="flex-1">
-                <div className="p-4 space-y-3">
-                    {isLoading && <div className="text-center text-muted-foreground p-4">Loading...</div>}
-                    {!isLoading && notes.length === 0 && (
-                        <div className="text-center text-muted-foreground p-8 border border-dashed border-border rounded-xl">
-                            No notes found. Create one to get started!
+            <div className="p-4 space-y-3 overflow-y-auto">
+                {isLoading && <div className="text-center text-muted-foreground p-4">Loading...</div>}
+                {!isLoading && notes.length === 0 && (
+                    <div className="text-center text-muted-foreground p-8 border border-dashed border-border rounded-xl">
+                        No notes found. Create one to get started!
+                    </div>
+                )}
+                {notes.map(note => (
+                    <div
+                        key={note.id}
+                        onClick={() => onSelectNote(note)}
+                        className="bg-surface border border-border rounded-xl p-4 hover:border-accent/50 cursor-pointer transition-colors group space-y-2"
+                    >
+                        <div className="flex justify-between items-start gap-2">
+                            <h3 className="font-semibold text-lg text-foreground group-hover:text-accent transition-colors truncate">{note.title}</h3>
+                            <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{formatDistanceToNow(new Date(note.updatedAt))} ago</span>
                         </div>
-                    )}
-                    {notes.map(note => (
-                        <div
-                            key={note.id}
-                            onClick={() => onSelectNote(note)}
-                            className="bg-surface border border-border rounded-xl p-4 hover:border-accent/50 cursor-pointer transition-colors group space-y-2"
-                        >
-                            <div className="flex justify-between items-start gap-2">
-                                <h3 className="font-semibold text-lg text-foreground group-hover:text-accent transition-colors truncate">{note.title}</h3>
-                                <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">{formatDistanceToNow(new Date(note.updatedAt))} ago</span>
-                            </div>
 
-                            {/* Content Preview (Strip HTML) */}
-                            <p className="text-sm text-muted-foreground line-clamp-2">
-                                {getNotePreview(note.content)}
-                            </p>
+                        {/* Content Preview (Strip HTML) */}
+                        <p className="text-sm text-muted-foreground line-clamp-2">
+                            {getNotePreview(note.content)}
+                        </p>
 
-                            <div className="flex flex-wrap gap-2 pt-1">
-                                {note.tags?.slice(0, 3).map((tag: string) => (
-                                    <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0 h-5 font-normal">
-                                        {tag}
-                                    </Badge>
-                                ))}
-                                {(note.tags?.length || 0) > 3 && (
-                                    <span className="text-xs text-muted-foreground self-center">+{note.tags!.length - 3} more</span>
-                                )}
-                            </div>
+                        <div className="flex flex-wrap gap-2 pt-1">
+                            {note.tags?.slice(0, 3).map((tag: string) => (
+                                <Badge key={tag} variant="secondary" className="text-xs px-1.5 py-0 h-5 font-normal">
+                                    {tag}
+                                </Badge>
+                            ))}
+                            {(note.tags?.length || 0) > 3 && (
+                                <span className="text-xs text-muted-foreground self-center">+{note.tags!.length - 3} more</span>
+                            )}
                         </div>
-                    ))}
-                </div>
-            </ScrollArea>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }

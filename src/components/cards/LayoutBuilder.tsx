@@ -51,9 +51,9 @@ function SortableLayoutItem({
     onUpdateText
 }: {
     item: LayoutItem;
-    attribute?: AttributeDefinition;
-    onRemove?: () => void;
-    onUpdateText?: (text: string) => void;
+    attribute?: Partial<AttributeDefinition> | undefined;
+    onRemove?: (() => void) | undefined;
+    onUpdateText?: ((text: string) => void) | undefined;
 }) {
     const {
         attributes,
