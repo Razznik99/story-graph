@@ -1,4 +1,14 @@
 import { prisma } from "@/lib/prisma";
+import {
+    createCardSchema,
+    createCardTypeSchema,
+    createCardRoleSchema,
+    createEventSchema,
+    createEventTypeSchema,
+    createAttributeSchema,
+    createNoteSchema,
+    createStorySchema
+} from "./response-schema";
 
 export const tools = [
     {
@@ -108,6 +118,51 @@ export const tools = [
             type: "object",
             properties: {}
         }
+    },
+    {
+        name: "propose_create_card",
+        description: "Propose creating a new card (character, location, etc.). You must use this instead of outputting JSON when trying to create something.",
+        parameters: createCardSchema
+    },
+    {
+        name: "propose_create_card_type",
+        description: "Propose creating a new card type.",
+        parameters: createCardTypeSchema
+    },
+    {
+        name: "propose_create_card_role",
+        description: "Propose creating a new card role.",
+        parameters: createCardRoleSchema
+    },
+    {
+        name: "propose_create_event",
+        description: "Propose creating a new event.",
+        parameters: createEventSchema
+    },
+    {
+        name: "propose_create_event_type",
+        description: "Propose creating a new event type.",
+        parameters: createEventTypeSchema
+    },
+    {
+        name: "propose_create_attribute",
+        description: "Propose creating a new attribute definition for a card type.",
+        parameters: createAttributeSchema
+    },
+    {
+        name: "propose_create_note",
+        description: "Propose creating a new note.",
+        parameters: createNoteSchema
+    },
+    {
+        name: "getStory",
+        description: "Retrieve details of the current story.",
+        parameters: { type: "object", properties: {} }
+    },
+    {
+        name: "propose_create_story",
+        description: "Propose editing or setting up the story details.",
+        parameters: createStorySchema
     }
 ];
 
@@ -122,6 +177,11 @@ export async function runTool(name: string, args: any, context?: any): Promise<a
 
     try {
         switch (name) {
+            case "getStory":
+                return await prisma.story.findUnique({
+                    where: { id: storyId }
+                });
+
             case "getCardTypes":
                 return await prisma.cardType.findMany({
                     where: { storyId },
@@ -208,6 +268,9 @@ export async function runTool(name: string, args: any, context?: any): Promise<a
                 };
 
             default:
+                if (name.startsWith("propose_create_")) {
+                    return { success: true, message: `Proposal sent to user for review.` };
+                }
                 throw new Error(`Unknown tool: ${name}`);
         }
     } catch (error: any) {

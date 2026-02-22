@@ -10,6 +10,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Check, X, Sparkles, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import ImageUpload from '@/components/ImageUpload';
+import { useQuery } from '@tanstack/react-query';
+import { useStoryStore } from '@/store/useStoryStore';
+import TimelineField from '@/components/events/TimelineField';
 
 interface SchemaField {
     name: string;
@@ -21,7 +25,7 @@ interface SchemaField {
 }
 
 interface CreateEntityPrimitiveProps {
-    type: 'Card' | 'Event' | 'Note' | 'Attribute' | 'CardType' | 'EventType' | 'CardRole';
+    type: 'Card' | 'Event' | 'Note' | 'Attribute' | 'CardType' | 'EventType' | 'CardRole' | 'Story';
     initialData: any;
     schema: readonly SchemaField[];
     onAccept: (data: any) => Promise<void>;
@@ -40,6 +44,41 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
+    const storyId = useStoryStore(state => state.selectedStoryId);
+
+    // Fetch dynamic options
+    const { data: cardTypes } = useQuery({
+        queryKey: ['cardTypes', storyId],
+        queryFn: async () => {
+            if (!storyId) return [];
+            const res = await fetch(`/api/card-types?storyId=${storyId}`);
+            if (!res.ok) throw new Error('Failed to fetch card types');
+            return res.json();
+        },
+        enabled: !!storyId && schema.some(f => f.name === 'cardTypeId')
+    });
+
+    const { data: eventTypes } = useQuery({
+        queryKey: ['eventTypes', storyId],
+        queryFn: async () => {
+            if (!storyId) return [];
+            const res = await fetch(`/api/event-types?storyId=${storyId}`);
+            if (!res.ok) throw new Error('Failed to fetch event types');
+            return res.json();
+        },
+        enabled: !!storyId && schema.some(f => f.name === 'eventTypeId')
+    });
+
+    const { data: attributes } = useQuery({
+        queryKey: ['attributes', data.cardTypeId],
+        queryFn: async () => {
+            if (!data.cardTypeId) return [];
+            const res = await fetch(`/api/card-types/attributes?cardTypeId=${data.cardTypeId}`);
+            if (!res.ok) throw new Error('Failed to fetch attributes');
+            return res.json();
+        },
+        enabled: !!data.cardTypeId && schema.some(f => f.name === 'attributeDefinitionId')
+    });
 
     // Validate on change
     useEffect(() => {
@@ -98,7 +137,10 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
     };
 
     return (
-        <Card className="w-full border-primary/20 bg-card/50 backdrop-blur-sm shadow-lg overflow-hidden my-2 animate-in fade-in zoom-in-95 duration-300">
+        <Card
+            className="w-full border-primary/20 bg-card/50 backdrop-blur-sm shadow-lg overflow-hidden my-2 animate-in fade-in zoom-in-95 duration-300"
+            onClick={(e) => e.stopPropagation()}
+        >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary/50 via-accent/50 to-primary/50" />
 
             <CardHeader className="pb-2 bg-muted/20">
@@ -116,7 +158,7 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                             {field.required && <span className="text-destructive">*</span>}
                         </Label>
 
-                        {field.type === 'string' && (
+                        {field.type === 'string' && field.name !== 'imageUrl' && field.name !== 'coverUrl' && (
                             <Input
                                 id={field.name}
                                 value={data[field.name] || ''}
@@ -124,6 +166,25 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                                 className={cn(errors[field.name] && "border-destructive focus-visible:ring-destructive")}
                                 placeholder={field.description}
                             />
+                        )}
+
+                        {(field.name === 'imageUrl' || field.name === 'coverUrl') && (
+                            <div className="space-y-2">
+                                <Textarea
+                                    value={data[field.name + '_prompt'] ?? (data[field.name] && !data[field.name].startsWith('http') ? data[field.name] : '')}
+                                    onChange={(e) => {
+                                        handleChange(field.name + '_prompt', e.target.value);
+                                    }}
+                                    placeholder={`Describe the ${field.name.replace('Url', '')} for the AI generator...`}
+                                    className="min-h-[60px]"
+                                />
+                                <ImageUpload
+                                    imageType={field.name === 'coverUrl' ? 'cover' : 'card'}
+                                    value={data[field.name]?.startsWith('http') ? data[field.name] : null}
+                                    onChange={(url) => handleChange(field.name, url)}
+                                    initialPrompt={data[field.name + '_prompt'] ?? (data[field.name] && !data[field.name].startsWith('http') ? data[field.name] : '')}
+                                />
+                            </div>
                         )}
 
                         {field.type === 'number' && (
@@ -147,7 +208,7 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                             />
                         )}
 
-                        {field.type === 'select' && (
+                        {field.type === 'select' && field.name !== 'timelineId' && (
                             <Select
                                 value={data[field.name]}
                                 onValueChange={(val) => handleChange(field.name, val)}
@@ -155,14 +216,36 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                                 <SelectTrigger id={field.name} className={cn(errors[field.name] && "border-destructive ring-destructive")}>
                                     <SelectValue placeholder={`Select ${field.label}`} />
                                 </SelectTrigger>
-                                <SelectContent>
-                                    {field.options?.map((opt) => (
+                                <SelectContent
+                                    className="bg-background z-[1500] max-h-[300px]"
+                                    position="popper"
+                                    sideOffset={5}
+                                >
+                                    {field.name === 'cardTypeId' && cardTypes?.map((ct: any) => (
+                                        <SelectItem key={ct.id} value={ct.id}>{ct.name}</SelectItem>
+                                    ))}
+                                    {field.name === 'eventTypeId' && eventTypes?.map((et: any) => (
+                                        <SelectItem key={et.id} value={et.id}>{et.name}</SelectItem>
+                                    ))}
+                                    {field.name === 'attributeDefinitionId' && attributes?.map((attr: any) => (
+                                        <SelectItem key={attr.id} value={attr.id}>{attr.name}</SelectItem>
+                                    ))}
+                                    {/* Fallback to static options if any */}
+                                    {(!['cardTypeId', 'eventTypeId', 'attributeDefinitionId'].includes(field.name)) && field.options?.map((opt) => (
                                         <SelectItem key={opt.value} value={opt.value}>
                                             {opt.label}
                                         </SelectItem>
                                     ))}
                                 </SelectContent>
                             </Select>
+                        )}
+
+                        {field.type === 'select' && field.name === 'timelineId' && storyId && (
+                            <TimelineField
+                                storyId={storyId}
+                                value={data[field.name] || null}
+                                onChange={(val) => handleChange(field.name, val)}
+                            />
                         )}
 
                         {field.type === 'json' && (

@@ -37,8 +37,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-import { CreateEntityPrimitive } from './CreateEntityPrimitive';
-import { frontendSchemas } from '@/lib/ai/frontend-schemas';
+import { ProposalMenu } from './ProposalMenu';
 import { toast } from 'sonner';
 
 export function AIPopover() {
@@ -64,6 +63,9 @@ export function AIPopover() {
     const [isModeMenuOpen, setIsModeMenuOpen] = useState(false);
 
     const [isLoading, setIsLoading] = useState(false);
+    const [isProposalMenuOpen, setIsProposalMenuOpen] = useState(true);
+
+    const hasProposals = messages.some(msg => msg.proposals && Array.isArray(msg.proposals) && msg.proposals.length > 0);
 
 
     /////////////////////////////////////////////////////////////////
@@ -252,6 +254,7 @@ export function AIPopover() {
                     chatId: data.chatId || currentChatId || '',
                     role: 'assistant',
                     content: data.content,
+                    proposals: data.proposals || undefined, // Store proposals safely in state 
                     createdAt: new Date().toISOString()
                 }
             ]);
@@ -264,98 +267,30 @@ export function AIPopover() {
     };
 
 
-    /////////////////////////////////////////////////////////////////
-    // Create Entity Handler
-    /////////////////////////////////////////////////////////////////
-
-    const handleCreateEntity = async (data: any, type: string) => {
-        try {
-            let endpoint = '';
-            switch (type) {
-                case 'Card': endpoint = '/api/cards'; break;
-                case 'Event': endpoint = '/api/events'; break;
-                case 'Note': endpoint = '/api/notes'; break;
-                // Add other mappings as needed
-                default:
-                    throw new Error(`Unknown entity type: ${type}`);
-            }
-
-            const res = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ...data, storyId })
-            });
-
-            if (!res.ok) throw new Error('Failed to create entity');
-
-            toast.success(`${type} created successfully!`);
-
-            // Add system message confirming creation
-            setMessages(prev => [
-                ...prev,
-                {
-                    id: Date.now().toString(),
-                    chatId: currentChatId || '',
-                    role: 'assistant',
-                    content: `Successfully created ${type}: ${data.name || data.title}`,
-                    createdAt: new Date().toISOString()
-                }
-            ]);
-
-        } catch (error) {
-            console.error(error);
-            toast.error(`Failed to create ${type}`);
-        }
-    };
-
-    // Helper to render message content or creation UI
+    // Helper to render message content
     const renderMessageContent = (msg: AIMessage) => {
-        if (msg.role === 'assistant' && mode === 'CREATE_MODE' && msg.content.trim().startsWith('{')) {
-            try {
-                const parsed = JSON.parse(msg.content);
-                // Check if it looks like a proposal
-                if (parsed.create_proposal) {
-                    const proposal = parsed.create_proposal;
-                    const type = proposal.type || 'Card'; // Default or detect
-                    const schema = frontendSchemas[type as keyof typeof frontendSchemas];
-
-                    if (schema) {
-                        return (
-                            <div className="w-full max-w-md">
-                                <CreateEntityPrimitive
-                                    type={type as any}
-                                    initialData={proposal}
-                                    schema={schema}
-                                    onAccept={(data) => handleCreateEntity(data, type)}
-                                    onReject={() => {
-                                        toast.info("Creation cancelled");
-                                    }}
-                                />
-                            </div>
-                        );
-                    }
-                }
-            } catch (e) {
-                // Fallback to text if not valid JSON
-            }
-        }
-
-        return <ReactMarkdown
-            components={{
-                p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
-                ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2" {...props} />,
-                ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2" {...props} />,
-                li: ({ node, ...props }) => <li className="mb-1" {...props} />,
-                code: ({ node, inline, className, children, ...props }: any) => {
-                    if (inline) {
-                        return <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
-                    }
-                    return <code className="block bg-muted p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-x-auto my-2" {...props}>{children}</code>
-                }
-            }}
-        >
-            {msg.content}
-        </ReactMarkdown>;
+        return (
+            <div className="flex flex-col gap-3">
+                {msg.content && (
+                    <ReactMarkdown
+                        components={{
+                            p: ({ node, ...props }) => <p className="mb-2 last:mb-0" {...props} />,
+                            ul: ({ node, ...props }) => <ul className="list-disc pl-4 mb-2" {...props} />,
+                            ol: ({ node, ...props }) => <ol className="list-decimal pl-4 mb-2" {...props} />,
+                            li: ({ node, ...props }) => <li className="mb-1" {...props} />,
+                            code: ({ node, inline, className, children, ...props }: any) => {
+                                if (inline) {
+                                    return <code className="bg-muted px-1 py-0.5 rounded text-xs font-mono" {...props}>{children}</code>
+                                }
+                                return <code className="block bg-muted p-2 rounded text-xs font-mono whitespace-pre-wrap overflow-x-auto my-2" {...props}>{children}</code>
+                            }
+                        }}
+                    >
+                        {msg.content}
+                    </ReactMarkdown>
+                )}
+            </div>
+        );
     };
 
     /////////////////////////////////////////////////////////////////
@@ -688,8 +623,8 @@ export function AIPopover() {
                                                 </div>
                                             )}
 
-                                            {/* Spacer */}
-                                            <div className="h-4" />
+                                            {/* Spacer to account for fixed input */}
+                                            <div className="h-30 flex-shrink-0" />
                                         </div>
                                     )
                                 }
@@ -717,10 +652,33 @@ export function AIPopover() {
                             </div >
 
 
-                        </div >
+                        </div>
 
-
-                    </div >,
+                        {/* Proposal Menu Overlay */}
+                        {hasProposals && isProposalMenuOpen && (
+                            <div className="h-full z-[800]">
+                                <ProposalMenu
+                                    messages={messages}
+                                    storyId={storyId!}
+                                    onProposalResolved={() => {
+                                        if (currentChatId) fetchMessages(currentChatId);
+                                    }}
+                                    onClose={() => setIsProposalMenuOpen(false)}
+                                />
+                            </div>
+                        )}
+                        {!isProposalMenuOpen && hasProposals && (
+                            <Button
+                                size="sm"
+                                variant="default"
+                                className="absolute right-0 top-1/2 -translate-y-1/2 translate-x-1/2 rotate-90 origin-center bg-accent text-accent-foreground shadow-lg hover:bg-accent/90 rounded-t-lg rounded-b-none border-b-0 h-8 px-4 font-semibold text-xs py-0 z-[800]"
+                                onClick={() => setIsProposalMenuOpen(true)}
+                            >
+                                <Sparkles className="h-3 w-3 mr-2" />
+                                Proposals Waiting
+                            </Button>
+                        )}
+                    </div>,
                     document.body
                 )
             }

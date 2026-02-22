@@ -75,11 +75,9 @@ export default function CardTypeEditor({ cardTypeId, onClose }: Props) {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const [typeRes, attrsRes, allTypesRes] = await Promise.all([
+            const [typeRes, attrsRes] = await Promise.all([
                 fetch(`/api/card-types/${cardTypeId}`),
                 fetch(`/api/card-types/attributes?cardTypeId=${cardTypeId}`),
-                // Since this component might not have all card types, we fetch them to list allowedCardTypes
-                fetch(`/api/card-types${cardType?.storyId ? `?storyId=${cardType.storyId}` : ''}`)
             ]);
 
             if (!typeRes.ok || !attrsRes.ok) throw new Error("Failed to fetch data");

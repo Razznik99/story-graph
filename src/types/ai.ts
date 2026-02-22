@@ -16,6 +16,7 @@ export interface AIMessage {
     role: 'user' | 'assistant' | 'system';
     content: string;
     metadata?: any;
+    proposals?: any;
     createdAt: string;
 }
 

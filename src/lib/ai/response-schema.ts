@@ -1,6 +1,11 @@
+import { LANGUAGES, STORY_MEDIUM, STORY_STATUSES, STORY_VISIBILITIES, STORY_GENRES } from '@/domain/constants';
+
 export default function getCreateSchema(context: any) {
 
     switch (context?.createType) {
+
+        case "STORY":
+            return createStorySchema;
 
         case "CARD":
             return createCardSchema;
@@ -30,7 +35,7 @@ export default function getCreateSchema(context: any) {
 
 }
 
-const createCardSchema = {
+export const createCardSchema = {
     type: "object",
     properties: {
 
@@ -50,6 +55,12 @@ const createCardSchema = {
             nullable: true
         },
 
+        imageUrl: {
+            type: "string",
+            description: "Prompt for an image generator to create a portrait for this card, or null/empty if none.",
+            nullable: true
+        },
+
         attributes: {
             type: "array",
             items: {
@@ -58,7 +69,7 @@ const createCardSchema = {
 
                     attributeDefinitionId: {
                         type: "string",
-                        description: "Must be retrieved using getAttributes tool"
+                        description: "Must be retrieved using getAttributes tool, ensure cardTypeId of attribute is the same as cardTypeId of this card"
                     },
 
                     name: {
@@ -87,7 +98,7 @@ const createCardSchema = {
     required: ["name", "cardTypeId"]
 };
 
-const createCardTypeSchema = {
+export const createCardTypeSchema = {
     type: "object",
     properties: {
         name: {
@@ -103,7 +114,7 @@ const createCardTypeSchema = {
     required: ["name"]
 };
 
-const createCardRoleSchema = {
+export const createCardRoleSchema = {
     type: "object",
     properties: {
         name: {
@@ -124,7 +135,7 @@ const createCardRoleSchema = {
     required: ["name"]
 };
 
-const createEventSchema = {
+export const createEventSchema = {
     type: "object",
     properties: {
         title: {
@@ -168,7 +179,7 @@ const createEventSchema = {
     required: ["title", "eventTypeId"]
 };
 
-const createEventTypeSchema = {
+export const createEventTypeSchema = {
     type: "object",
     properties: {
         name: {
@@ -184,7 +195,7 @@ const createEventTypeSchema = {
     required: ["name"]
 };
 
-const createAttributeSchema = {
+export const createAttributeSchema = {
     type: "object",
     properties: {
         name: {
@@ -214,7 +225,7 @@ const createAttributeSchema = {
     required: ["name", "cardTypeId", "attrType"]
 };
 
-const createNoteSchema = {
+export const createNoteSchema = {
     type: "object",
     properties: {
         title: {
@@ -227,4 +238,62 @@ const createNoteSchema = {
         }
     },
     required: ["title", "content"]
+};
+
+export const createStorySchema = {
+    type: "object",
+    properties: {
+        title: {
+            type: "string",
+            description: "Title of the story"
+        },
+        abbreviation: {
+            type: "string",
+            description: "Short abbreviation of the title, max 10 chars"
+        },
+        language: {
+            type: "string",
+            enum: LANGUAGES,
+            description: "Language of the story"
+        },
+        medium: {
+            type: "string",
+            enum: STORY_MEDIUM,
+            description: "Medium of the story"
+        },
+        genres: {
+            type: "array",
+            items: {
+                type: "string",
+                enum: STORY_GENRES
+            },
+            description: "Genres applying to the story"
+        },
+        synopsis: {
+            type: "string",
+            description: "Brief synopsis of the story",
+            nullable: true
+        },
+        tags: {
+            type: "array",
+            items: { type: "string" },
+            description: "Tags associated with the story"
+        },
+        status: {
+            type: "string",
+            enum: STORY_STATUSES,
+            description: "Current status of the story"
+        },
+        visibility: {
+            type: "string",
+            enum: STORY_VISIBILITIES,
+            description: "Visibility of the story"
+        },
+        coverUrl: {
+            type: "string",
+            description: "Prompt for an image generator to create a story cover, or null/empty if none.",
+            nullable: true
+        }
+    },
+    required: ["title", "abbreviation", "language", "medium", "genres", "status", "visibility"]
 };

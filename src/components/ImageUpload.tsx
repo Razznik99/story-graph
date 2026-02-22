@@ -13,6 +13,7 @@ interface ImageUploadProps {
     className?: string;
     disabled?: boolean;
     imageType?: 'card' | 'cover';
+    initialPrompt?: string;
 }
 
 export default function ImageUpload({
@@ -20,7 +21,8 @@ export default function ImageUpload({
     onChange,
     className,
     disabled,
-    imageType
+    imageType,
+    initialPrompt
 }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
@@ -221,6 +223,7 @@ export default function ImageUpload({
                         onOpenChange={setShowGenerator}
                         imageType={imageType}
                         onGenerate={(file) => handleFile(file)}
+                        initialPrompt={initialPrompt || ''}
                     />
                 </>
             )}

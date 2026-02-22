@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
@@ -22,13 +22,20 @@ interface ImageGeneratorProps {
     onOpenChange: (open: boolean) => void;
     imageType: 'card' | 'cover';
     onGenerate: (file: File) => void;
+    initialPrompt?: string;
 }
 
-export default function ImageGenerator({ open, onOpenChange, imageType, onGenerate }: ImageGeneratorProps) {
-    const [prompt, setPrompt] = useState('');
+export default function ImageGenerator({ open, onOpenChange, imageType, onGenerate, initialPrompt }: ImageGeneratorProps) {
+    const [prompt, setPrompt] = useState(initialPrompt || '');
     const [cfgScale, setCfgScale] = useState(7);
     const [stylePreset, setStylePreset] = useState('cinematic');
     const [isGenerating, setIsGenerating] = useState(false);
+
+    useEffect(() => {
+        if (open && initialPrompt) {
+            setPrompt(initialPrompt);
+        }
+    }, [open, initialPrompt]);
 
     const handleGenerate = async () => {
         if (!prompt.trim()) {

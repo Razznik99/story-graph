@@ -3,6 +3,7 @@ export const frontendSchemas = {
         { name: 'name', label: 'Name', type: 'string', required: true, description: 'Name of the card' },
         { name: 'cardTypeId', label: 'Type', type: 'select', required: true, options: [], description: 'Type of the card (Character, Location, etc.)' },
         { name: 'description', label: 'Description', type: 'text', required: false, description: 'Narrative description' },
+        { name: 'imageUrl', label: 'Image', type: 'string', required: false, description: 'Prompt for image generator' },
         { name: 'attributes', label: 'Assigned Attributes', type: 'attributes_array', required: false, description: 'Mapped data properties' },
         { name: 'tags', label: 'Tags', type: 'string', required: false, description: 'Comma separated tags' }
     ],
@@ -38,5 +39,17 @@ export const frontendSchemas = {
     Note: [
         { name: 'title', label: 'Title', type: 'string', required: true, description: 'Title of the note' },
         { name: 'content', label: 'Content', type: 'text', required: true, description: 'Content of the note' }
+    ],
+    Story: [
+        { name: 'title', label: 'Title', type: 'string', required: true, description: 'Title of the story' },
+        { name: 'abbreviation', label: 'Abbreviation', type: 'string', required: true, description: 'Short abbreviation' },
+        { name: 'language', label: 'Language', type: 'string', required: true, description: 'Language' },
+        { name: 'medium', label: 'Medium', type: 'string', required: true, description: 'Medium' },
+        { name: 'genres', label: 'Genres', type: 'string', required: true, description: 'Comma separated genres' },
+        { name: 'synopsis', label: 'Synopsis', type: 'text', required: false, description: 'Synopsis' },
+        { name: 'tags', label: 'Tags', type: 'string', required: false, description: 'Comma separated tags' },
+        { name: 'status', label: 'Status', type: 'string', required: true, description: 'Status' },
+        { name: 'visibility', label: 'Visibility', type: 'string', required: true, description: 'Visibility' },
+        { name: 'coverUrl', label: 'Cover Image', type: 'string', required: false, description: 'Prompt for image generator' }
     ],
 } as const;

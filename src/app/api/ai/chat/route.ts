@@ -6,7 +6,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { getSystemInstruction } from "@/lib/ai/system-instructions";
 import { tools, runTool } from "@/lib/ai/tools";
-import getCreateSchema from "@/lib/ai/response-schema";
 import { generateChatTitle } from "@/app/api/ai/chats/route";
 
 
@@ -67,12 +66,6 @@ export async function POST(req: Request) {
         const systemInstruction = getSystemInstruction(mode || "BRAINSTORM_MODE");
 
         // Config for the model
-        let schema;
-
-        if (mode === "CREATE_MODE") {
-            schema = getCreateSchema(context);
-        }
-
         const config: any = {
             systemInstruction: {
                 parts: [{ text: systemInstruction }]
@@ -81,17 +74,14 @@ export async function POST(req: Request) {
                 {
                     functionDeclarations: tools
                 }
-            ],
-            ...(mode === "CREATE_MODE" && {
-                responseMimeType: "application/json",
-                responseSchema: schema
-            })
+            ]
         };
 
 
 
         // Tool execution loop
         let finalResponseText = "";
+        let accumulatedProposals: any[] = []; // Store intercepted proposals
 
         let iteration = 0;
         const MAX_ITERATIONS = 10;
@@ -129,6 +119,21 @@ export async function POST(req: Request) {
 
                 for (const call of functionCalls) {
                     const toolName = call.name || "unknown_tool";
+
+                    // Intercept create proposals
+                    if (toolName.startsWith("propose_create_")) {
+                        console.log("Intercepted proposal:", toolName);
+                        // Extract type from name (e.g. propose_create_card -> Card)
+                        let type = toolName.replace("propose_create_", "");
+                        // Convert snake_case to PascalCase for the frontend (e.g. card_type -> CardType)
+                        type = type.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+
+                        accumulatedProposals.push({
+                            type: type,
+                            ...call.args
+                        });
+                    }
+
                     try {
                         const toolResult = await runTool(toolName, call.args, { storyId: derivedStoryId });
 
@@ -166,19 +171,6 @@ export async function POST(req: Request) {
             } else {
                 // No function calls, so this is the final text response
                 finalResponseText = result.text || "";
-
-                // If it's pure CREATE_MODE, we can try to parse it here to fail fast if needed, 
-                // but the client will also parse it. 
-                // Since we enforced responseMimeType: "application/json", it SHOULD be JSON.
-                if (mode === "CREATE_MODE") {
-
-                    try {
-                        JSON.parse(finalResponseText);
-                    } catch (e) {
-                        console.error("Model returned invalid JSON in CREATE_MODE:", finalResponseText);
-                    }
-                }
-
                 break;
             }
 
@@ -235,11 +227,16 @@ export async function POST(req: Request) {
             });
 
             // Save Assistant Message
+            const assistantProposals = accumulatedProposals.length > 0
+                ? accumulatedProposals
+                : undefined;
+
             await prisma.aIMessage.create({
                 data: {
                     chatId: finalChatId,
-                    role: 'assistant', // Schema seems to use 'assistant' based on previous diff
-                    content: finalResponseText
+                    role: 'assistant',
+                    content: finalResponseText,
+                    ...(assistantProposals ? { proposals: assistantProposals } : {})
                 }
             });
 
@@ -251,9 +248,12 @@ export async function POST(req: Request) {
         }
 
         return NextResponse.json({
-            role: "model",
-            content: finalResponseText,
+            id: 'temp-id',
             chatId: finalChatId,
+            role: 'assistant',
+            content: finalResponseText,
+            proposals: accumulatedProposals,
+            createdAt: new Date()
         });
 
     } catch (error) {

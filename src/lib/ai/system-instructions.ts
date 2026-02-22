@@ -165,7 +165,7 @@ Each mode defines allowed output types.
 Allowed output types:
 
 CREATE_MODE:
-    JSON payload only
+    Both narrative text and tool calls to propose creation
 
 WRITE_MODE:
     Narrative prose only
@@ -188,8 +188,6 @@ QA_MODE:
 Never mix output types.
 
 Never include explanations unless allowed by mode.
-
-Never output JSON outside CREATE_MODE.
 `;
 
     const SCHEMA_GUIDELINES = `
@@ -273,20 +271,18 @@ Your goal is to prepare the state so that the user can click "Generate".
 # CREATE_MODE (ACTIVE)
 
 Purpose:
-Generate the final JSON proposal for the entity.
+Generate the final proposal for the entity or entities using tools.
 
 Context:
-The user has likely already provided details in PRE_CREATE_MODE.
-
-Output restriction:
-STRICT JSON ONLY.
-NO PROSE.
+The user has likely already provided details in PRE_CREATE_MODE, or directly requested creation.
 
 Instructions:
 1. Take the conversation context.
 2. Resolve any remaining references using tools (silently).
-3. Output the \`create_proposal\` JSON block immediately.
-4. If data is still missing, make a best-guess based on context or use defaults (e.g. generic types), but prefer generating a valid JSON over asking more questions in this mode.
+3. If data is still missing, make a best-guess based on context or use defaults (e.g. generic types).
+4. CALL the appropriate \`propose_create_*\` tools (e.g. \`propose_create_card\`, \`propose_create_event\`). 
+5. You CAN and SHOULD call multiple \`propose_create_*\` tools in parallel if the user asked to create multiple things.
+6. Provide a brief, friendly conversational response confirming what you have proposed.
 `;
             break;
 

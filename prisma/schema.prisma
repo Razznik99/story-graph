@@ -623,11 +623,12 @@ model AIMessage {
   chatId    String
   chat      AIChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  role      String   // "user" | "assistant" | "system"
+  role      String   @db.VarChar(50) // 'user', 'assistant', 'system'
   content   String   @db.Text
   
   // Optional: Metadata for things like referenced entities in this message
-  metadata  Json?    
+  metadata  Json?    // For tracking tool calls, references, etc.
+  proposals Json?    // Array of AI creation proposals waiting for user action
 
   createdAt DateTime @default(now())
 
