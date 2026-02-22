@@ -201,7 +201,7 @@ Card:
 - Name (Required)
 - Type (Required, must be a known CardType ID)
 - Description (Optional but recommended)
-- Attributes (Optional, requires AttributeDefinition ID and Value)
+- Attributes (Optional, array of objects containing '{ attributeDefinitionId: ID, value: any, name: string }'. 'value' MUST conform to the attrType defined by the AttributeDefinition (e.g. Text is string, Number/UnitNumber is int, Option/MultiOption is string from config.options, Link/Multilink is a string from getCards tool note cardType of the card must be included in config.allowedCardTypes ))
 - Tags (Optional)
 
 CardType:
@@ -231,7 +231,12 @@ ATTRIBUTE:
 - Name (Required)
 - Type (Required, must be a known CardType ID)
 - Description (Optional but recommended)
-- Config (Optional)
+- attrType (Required. One of: 'Text', 'Number', 'UnitNumber', 'Option', 'MultiOption', 'Link', 'MultiLink')
+- Config (Optional. A JSON object defining constraints:
+   - 'UnitNumber' requires { "unit": string }. (Card value must be { value: number, unit: string }).
+   - 'Option' / 'MultiOption' requires { "options": string[] }. (Card value must be a string or string[] from config).
+   - 'Link' / 'MultiLink' requires { "allowedCardTypes": string[] }. (Card value must be a Card ID string or array of Card ID strings that have a cardType that matches config).
+)
 
 Note:
 - Title (Required)

@@ -2,25 +2,29 @@
 
 import { useState, useRef } from 'react';
 import { Button } from '@/components/ui/button';
-import { Loader2, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, X, Image as ImageIcon, Wand2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import ImageGenerator from '@/components/ai/ImageGenerator';
 
 interface ImageUploadProps {
     value?: string | null;
     onChange: (url: string | null) => void;
     className?: string;
     disabled?: boolean;
+    imageType?: 'card' | 'cover';
 }
 
 export default function ImageUpload({
     value,
     onChange,
     className,
-    disabled
+    disabled,
+    imageType
 }: ImageUploadProps) {
     const [isUploading, setIsUploading] = useState(false);
     const [isDragging, setIsDragging] = useState(false);
+    const [showGenerator, setShowGenerator] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFile = async (file: File) => {
@@ -128,7 +132,7 @@ export default function ImageUpload({
     };
 
     return (
-        <div className={cn("w-full", className)}>
+        <div className={cn("w-full flex flex-col gap-2", className)}>
             <div
                 className={cn(
                     "relative group flex flex-col items-center justify-center w-full h-40 rounded-lg border-2 border-dashed transition-all cursor-pointer overflow-hidden",
@@ -196,6 +200,30 @@ export default function ImageUpload({
                     </div>
                 )}
             </div>
+            {imageType && (
+                <>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full gap-2 text-accent hover:text-accent border-accent/20 hover:border-accent hover:bg-accent/10"
+                        onClick={(e) => {
+                            e.preventDefault();
+                            setShowGenerator(true);
+                        }}
+                        disabled={disabled || isUploading}
+                    >
+                        <Wand2 className="h-4 w-4" />
+                        Generate with AI
+                    </Button>
+                    <ImageGenerator
+                        open={showGenerator}
+                        onOpenChange={setShowGenerator}
+                        imageType={imageType}
+                        onGenerate={(file) => handleFile(file)}
+                    />
+                </>
+            )}
         </div>
     );
 }

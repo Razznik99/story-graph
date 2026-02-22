@@ -3,6 +3,7 @@ export const frontendSchemas = {
         { name: 'name', label: 'Name', type: 'string', required: true, description: 'Name of the card' },
         { name: 'cardTypeId', label: 'Type', type: 'select', required: true, options: [], description: 'Type of the card (Character, Location, etc.)' },
         { name: 'description', label: 'Description', type: 'text', required: false, description: 'Narrative description' },
+        { name: 'attributes', label: 'Assigned Attributes', type: 'attributes_array', required: false, description: 'Mapped data properties' },
         { name: 'tags', label: 'Tags', type: 'string', required: false, description: 'Comma separated tags' }
     ],
     CardType: [
@@ -30,8 +31,9 @@ export const frontendSchemas = {
     Attribute: [
         { name: 'name', label: 'Name', type: 'string', required: true, description: 'Name of the attribute' },
         { name: 'cardTypeId', label: 'Card Type', type: 'select', required: true, options: [], description: 'Associated Card Type' },
-        { name: 'attrType', label: 'Attribute Type', type: 'select', required: true, options: [{ label: 'Text', value: 'Text' }, { label: 'Number', value: 'Number' }, { label: 'Select', value: 'Option' }], description: 'Data type' },
-        { name: 'description', label: 'Description', type: 'text', required: false, description: 'Description' }
+        { name: 'attrType', label: 'Attribute Type', type: 'select', required: true, options: [{ label: 'Text', value: 'Text' }, { label: 'Number', value: 'Number' }, { label: 'UnitNumber', value: 'UnitNumber' }, { label: 'Option', value: 'Option' }, { label: 'MultiOption', value: 'MultiOption' }, { label: 'Link', value: 'Link' }, { label: 'MultiLink', value: 'MultiLink' }], description: 'Data type' },
+        { name: 'description', label: 'Description', type: 'text', required: false, description: 'Description' },
+        { name: 'config', label: 'Configuration', type: 'json', required: false, description: 'Settings specific to the attribute type' }
     ],
     Note: [
         { name: 'title', label: 'Title', type: 'string', required: true, description: 'Title of the note' },

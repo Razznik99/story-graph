@@ -391,6 +391,7 @@ export default function CardEditor({
             <div className="space-y-2">
                 <Label className="text-text-secondary">Image</Label>
                 <ImageUpload
+                    imageType="card"
                     value={formData.imageUrl}
                     onChange={(url) => setFormData(prev => ({ ...prev, imageUrl: url || '' }))}
                 />

@@ -276,6 +276,7 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
                         <div className="space-y-2">
                             <Label className="text-text-secondary">Cover Image</Label>
                             <ImageUpload
+                                imageType="cover"
                                 value={coverUrl}
                                 onChange={(url) => setCoverUrl(url || '')}
                             />

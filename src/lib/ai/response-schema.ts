@@ -61,8 +61,14 @@ const createCardSchema = {
                         description: "Must be retrieved using getAttributes tool"
                     },
 
-                    value: {
+                    name: {
                         type: "string",
+                        description: "The human-readable name of the attribute",
+                        nullable: true
+                    },
+
+                    value: {
+                        // Omit 'type' to allow dynamic types (number, array, object) depending on the attribute definition.
                         description: "Value of the attribute depends attrType of attribute. if (attrType = 'Text') { type = 'String' }, if (attrtype = 'Number' or 'UnitNumber') { type = 'int' }, if (attrType = 'Option' or 'MultiOption') { type = 'String', enum = config }, if (attrtype = 'Link' or 'MultiLink') { type = 'string' description = 'must be gotten from getCard tool, only allow cards have the cardTypes in config }"
                     }
 
@@ -196,11 +202,12 @@ const createAttributeSchema = {
         },
         attrType: {
             type: "string",
-            description: "Type of the attribute value (e.g., Text, Number)"
+            enum: ['Text', 'Number', 'UnitNumber', 'Option', 'MultiOption', 'Link', 'MultiLink'],
+            description: "Type of the attribute value"
         },
         config: {
             type: "object",
-            description: "Configuration for the attribute",
+            description: "Configuration for the attribute depending on attrType (e.g. { unit: string } if UnitNumber, { options: string[]] } if Option/MultiOption, { allowedCardTypes: string[]] (using getCardTypes tool)} if Link/MultiLink)",
             nullable: true
         }
     },

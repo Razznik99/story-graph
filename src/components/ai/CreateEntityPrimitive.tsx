@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 
 interface SchemaField {
     name: string;
-    type: 'string' | 'number' | 'text' | 'select' | 'multiselect';
+    type: 'string' | 'number' | 'text' | 'select' | 'multiselect' | 'json' | 'attributes_array';
     label: string;
     description?: string;
     required?: boolean;
@@ -29,7 +29,15 @@ interface CreateEntityPrimitiveProps {
 }
 
 export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onReject }: CreateEntityPrimitiveProps) {
-    const [data, setData] = useState(initialData);
+    const [data, setData] = useState(() => {
+        const initial = { ...initialData };
+        schema.forEach(field => {
+            if (field.type === 'json' && typeof initial[field.name] === 'object' && initial[field.name] !== null) {
+                initial[field.name] = JSON.stringify(initial[field.name], null, 2);
+            }
+        });
+        return initial;
+    });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -44,6 +52,15 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
             if (field.required && !data[field.name]) {
                 newErrors[field.name] = 'This field is required';
             }
+            if (field.type === 'json' && data[field.name]) {
+                if (typeof data[field.name] === 'string') {
+                    try {
+                        JSON.parse(data[field.name]);
+                    } catch (e) {
+                        newErrors[field.name] = 'Invalid JSON format';
+                    }
+                }
+            }
         });
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
@@ -57,7 +74,16 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
 
         setIsSubmitting(true);
         try {
-            await onAccept(data);
+            const payload = { ...data };
+            schema.forEach(field => {
+                if (field.type === 'json' && typeof payload[field.name] === 'string' && payload[field.name].trim()) {
+                    try {
+                        payload[field.name] = JSON.parse(payload[field.name]);
+                    } catch (e) { }
+                }
+            });
+
+            await onAccept(payload);
             toast.success(`${type} created successfully!`);
         } catch (error) {
             console.error(error);
@@ -137,6 +163,35 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                                     ))}
                                 </SelectContent>
                             </Select>
+                        )}
+
+                        {field.type === 'json' && (
+                            <Textarea
+                                id={field.name}
+                                value={data[field.name] || ''}
+                                onChange={(e) => handleChange(field.name, e.target.value)}
+                                className={cn("min-h-[100px] font-mono text-xs", errors[field.name] && "border-destructive focus-visible:ring-destructive")}
+                                placeholder={field.description || "{ }"}
+                            />
+                        )}
+
+                        {field.type === 'attributes_array' && Array.isArray(data[field.name]) && data[field.name].length > 0 && (
+                            <div className="space-y-2 mt-2">
+                                {data[field.name].map((attr: any, i: number) => (
+                                    <div key={i} className="text-xs p-2 rounded border bg-muted/40 flex flex-col gap-1">
+                                        <div className="font-semibold text-primary">{attr.name || attr.attributeDefinitionId || 'Unknown Attribute'}</div>
+                                        <div className="text-muted-foreground break-all">
+                                            {typeof attr.value === 'object' ? JSON.stringify(attr.value, null, 2) : String(attr.value)}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {field.type === 'attributes_array' && (!Array.isArray(data[field.name]) || data[field.name].length === 0) && (
+                            <div className="text-xs text-muted-foreground italic p-2 border border-dashed rounded bg-muted/20">
+                                No attributes proposed.
+                            </div>
                         )}
 
                         {errors[field.name] && (
