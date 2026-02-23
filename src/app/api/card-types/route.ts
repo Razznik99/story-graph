@@ -26,7 +26,15 @@ export async function GET(req: NextRequest) {
 
         const cardTypes = await prisma.cardType.findMany({
             where: { storyId },
-            include: { attributes: true },
+            include: {
+                attributes: true,
+                _count: {
+                    select: {
+                        cards: true,
+                        identities: true
+                    }
+                }
+            },
             orderBy: { createdAt: 'asc' },
         });
 

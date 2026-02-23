@@ -9,6 +9,9 @@ import { Save, Trash2, X, PanelRightClose, PanelRightOpen, Calendar } from 'luci
 import { Note } from '@/domain/types/index';
 import TimelineEventsSidebar from './TimelineEventsSidebar';
 import { cn } from '@/lib/utils';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { getTimelineConfig, listTLNodes, updateTLNodeLabel } from '@/lib/timeline-api';
+import { getDerivedNumber, getLevelName } from '@/components/timeline/timeline-explorer-helpers';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -32,11 +35,34 @@ interface NoteEditorProps {
 }
 
 export default function NoteEditor({ note, storyId, onSave, onDelete, onCancel, isTimelineNote = false }: NoteEditorProps) {
+    const queryClient = useQueryClient();
     const [title, setTitle] = useState(note?.title || '');
     const [content, setContent] = useState<any>(note?.content || '');
     const [tags, setTags] = useState<string[]>(note?.tags || []);
     const [isSaving, setIsSaving] = useState(false);
     const [showSidebar, setShowSidebar] = useState(true);
+
+    const { data: cfg } = useQuery({
+        queryKey: ['tl', 'config', storyId],
+        queryFn: () => getTimelineConfig(storyId),
+        enabled: isTimelineNote && !!storyId,
+    });
+
+    const { data: nodes = [] } = useQuery({
+        queryKey: ['tl', 'nodes', storyId],
+        queryFn: () => listTLNodes(storyId),
+        enabled: isTimelineNote && !!storyId,
+    });
+
+    const timelineNode = isTimelineNote && note?.timelineId ? nodes.find(n => n.id === note.timelineId) : null;
+    let timelinePrefix = "Timeline Note";
+
+    if (timelineNode && cfg) {
+        const levelName = timelineNode.name || getLevelName(timelineNode.level, cfg);
+        const orderNum = getDerivedNumber(timelineNode, nodes, cfg);
+        const isSingleRoot = cfg.timelineType === 'single' && timelineNode.level === 1;
+        timelinePrefix = isSingleRoot ? levelName : `${levelName} ${orderNum}`;
+    }
 
     // If existing note changes (e.g. selection), update state
     useEffect(() => {
@@ -60,6 +86,13 @@ export default function NoteEditor({ note, storyId, onSave, onDelete, onCancel, 
                 tags,
                 storyId, // Ensure storyId is passed for new notes
             });
+
+            if (isTimelineNote && note?.timelineId && title !== note?.title) {
+                // Also update the timeline node title if it changed
+                await updateTLNodeLabel(note.timelineId, title);
+                queryClient.invalidateQueries({ queryKey: ['tl', 'nodes', storyId] });
+            }
+
             // Don't close automatically, maybe just toast? User might want to keep editing.
             // Or if it's "Save & Close"? Usually Save stays.
             toast.success("Note saved");
@@ -90,7 +123,7 @@ export default function NoteEditor({ note, storyId, onSave, onDelete, onCancel, 
                     <div className="flex items-center gap-3 flex-1 min-w-0">
                         {isTimelineNote ? (
                             <div className="flex flex-col w-full">
-                                <span className="text-xs font-bold text-accent uppercase tracking-wider">Timeline Note</span>
+                                <span className="text-xs font-bold text-accent uppercase tracking-wider">{timelinePrefix}</span>
                                 <Input
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}

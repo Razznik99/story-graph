@@ -218,7 +218,11 @@ export default function EventsTab() {
                                                 <AlertDialogHeader>
                                                     <AlertDialogTitle>Delete Event Type?</AlertDialogTitle>
                                                     <AlertDialogDescription>
-                                                        This will delete the <strong>{type.name}</strong> event type. Events using this type may become invalid or generic.
+                                                        This will delete the <strong>{type.name}</strong> event type.
+                                                        This action cannot be undone.
+                                                        <div className="mt-2 p-2 bg-destructive/10 text-destructive rounded-md text-sm border border-destructive/20 font-medium">
+                                                            Warning: This will permanently delete <strong>{((type as any)._count?.events) || 0} events</strong> associated with this type.
+                                                        </div>
                                                     </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>

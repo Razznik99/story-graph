@@ -140,6 +140,18 @@ export default function CardsTab() {
     };
 
 
+    const handleDeleteType = async (id: string) => {
+        try {
+            const res = await fetch(`/api/card-types/${id}`, { method: 'DELETE' });
+            if (!res.ok) throw new Error("Failed to delete card type");
+            toast.success("Card Type deleted");
+            setSelectedTypeId(null); // Deselect if open
+            fetchData();
+        } catch (error: any) {
+            toast.error(error.message);
+        }
+    };
+
     if (!selectedStoryId) {
         return (
             <div className="p-8 text-center text-muted-foreground bg-surface rounded-lg border border-border">
@@ -213,10 +225,37 @@ export default function CardsTab() {
                         {cardTypes.map(type => (
                             <Card key={type.id} className="hover:border-primary/50 transition-colors cursor-pointer group" onClick={() => setSelectedTypeId(type.id)}>
                                 <CardHeader className="pb-2">
-                                    <div className="flex items-center gap-2">
-                                        <CardTitle className="text-base">{type.name}</CardTitle>
+                                    <div className="flex justify-between items-start">
+                                        <div className="flex items-center gap-2">
+                                            <CardTitle className="text-base">{type.name}</CardTitle>
+                                        </div>
+                                        <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <AlertDialog>
+                                                <AlertDialogTrigger asChild>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive/70 hover:text-destructive hover:bg-destructive/10" onClick={(e) => e.stopPropagation()}>
+                                                        <Trash2 size={14} />
+                                                    </Button>
+                                                </AlertDialogTrigger>
+                                                <AlertDialogContent onClick={(e) => e.stopPropagation()}>
+                                                    <AlertDialogHeader>
+                                                        <AlertDialogTitle>Delete Card Type?</AlertDialogTitle>
+                                                        <AlertDialogDescription>
+                                                            This will delete the <strong>{type.name}</strong> template.
+                                                            This action cannot be undone.
+                                                            <div className="mt-2 p-2 bg-destructive/10 text-destructive rounded-md text-sm border border-destructive/20 font-medium">
+                                                                Warning: This will permanently delete <strong>{((type as any)._count?.cards) || 0} cards</strong> and <strong>{((type as any)._count?.identities) || 0} identities</strong> associated with this type.
+                                                            </div>
+                                                        </AlertDialogDescription>
+                                                    </AlertDialogHeader>
+                                                    <AlertDialogFooter>
+                                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                                        <AlertDialogAction onClick={() => handleDeleteType(type.id)} className="bg-destructive hover:bg-destructive-hover">Delete</AlertDialogAction>
+                                                    </AlertDialogFooter>
+                                                </AlertDialogContent>
+                                            </AlertDialog>
+                                        </div>
                                     </div>
-                                    <CardDescription className="line-clamp-2 min-h-[40px]">{type.description || "No description."}</CardDescription>
+                                    <CardDescription className="line-clamp-2 min-h-[40px] mt-2">{type.description || "No description."}</CardDescription>
                                 </CardHeader>
                                 <CardFooter className="pt-2">
                                     <Button variant="secondary" className="w-full opacity-0 group-hover:opacity-100 transition-opacity h-8">Edit Template</Button>

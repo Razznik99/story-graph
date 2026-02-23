@@ -28,6 +28,13 @@ export async function GET(req: NextRequest) {
 
         const eventTypes = await prisma.eventType.findMany({
             where: { storyId },
+            include: {
+                _count: {
+                    select: {
+                        events: true
+                    }
+                }
+            },
             orderBy: { createdAt: 'asc' },
         });
 
