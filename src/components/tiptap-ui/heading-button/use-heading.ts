@@ -34,7 +34,7 @@ export interface UseHeadingConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The heading level.
    */
@@ -47,7 +47,7 @@ export interface UseHeadingConfig {
   /**
    * Callback function called after a successful heading toggle.
    */
-  onToggled?: () => void
+  onToggled?: (() => void) | undefined
 }
 
 export const headingIcons = {

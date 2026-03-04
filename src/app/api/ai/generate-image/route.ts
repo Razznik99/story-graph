@@ -1,9 +1,35 @@
 import { NextResponse } from 'next/server';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { getUserPlanLimits, canConsumeImageGen } from '@/lib/pricing';
 
 export async function POST(req: Request) {
     try {
         const body = await req.json();
         const { prompts, cfg_scale = 7, style_preset, width = 1024, height = 1024 } = body;
+
+        const session = await getServerSession(authOptions);
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: { id: true, plan: true, subscriptionStatus: true, imgGenRemaining: true }
+        });
+
+        if (!user) {
+            return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+        }
+
+        const limits = getUserPlanLimits(user);
+        if (limits.img_gen === 0) {
+            return NextResponse.json({ error: 'Image generation requires a paid plan. Please upgrade.' }, { status: 403 });
+        }
+        if (!canConsumeImageGen(user.imgGenRemaining, 1)) {
+            return NextResponse.json({ error: 'Image generation limit reached for your current billing period.' }, { status: 403 });
+        }
 
         const engineId = 'stable-diffusion-xl-1024-v1-0';
         const apiHost = process.env.IMG_API_HOST ?? 'https://api.stability.ai';
@@ -56,7 +82,15 @@ export async function POST(req: Request) {
         }
 
         // Return the best/first base64 artifact
-        return NextResponse.json({ base64: responseJSON.artifacts[0].base64 });
+        const base64Image = responseJSON.artifacts[0].base64;
+
+        // Deduct image generation limit
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { imgGenRemaining: Math.max(0, user.imgGenRemaining - 1) }
+        });
+
+        return NextResponse.json({ base64: base64Image });
     } catch (error) {
         console.error('Image generation error:', error);
         return NextResponse.json({ error: 'Internal server error' }, { status: 500 });

@@ -82,11 +82,11 @@ export interface UseColorHighlightConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The color to apply when toggling the highlight.
    */
-  highlightColor?: string
+  highlightColor?: string | undefined
   /**
    * Optional label to display alongside the icon.
    */
@@ -106,7 +106,7 @@ export interface UseColorHighlightConfig {
   /**
    * Called when the highlight is applied.
    */
-  onApplied?: ({
+  onApplied?: (({
     color,
     label,
     mode,
@@ -114,7 +114,7 @@ export interface UseColorHighlightConfig {
     color: string
     label: string
     mode: HighlightMode
-  }) => void
+  }) => void) | undefined
 }
 
 export function pickHighlightColorsByValue(values: string[]) {

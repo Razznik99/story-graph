@@ -28,7 +28,7 @@ export interface UseTextAlignConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The text alignment to apply.
    */
@@ -37,11 +37,11 @@ export interface UseTextAlignConfig {
    * Whether the button should hide when alignment is not available.
    * @default false
    */
-  hideWhenUnavailable?: boolean
+  hideWhenUnavailable?: boolean | undefined
   /**
    * Callback function called after a successful alignment change.
    */
-  onAligned?: () => void
+  onAligned?: (() => void) | undefined
 }
 
 export const TEXT_ALIGN_SHORTCUT_KEYS: Record<TextAlign, string> = {

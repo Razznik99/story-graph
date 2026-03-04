@@ -202,7 +202,25 @@ export default function DashboardPage() {
             setSearchResults([]);
             fetchDashboardData();
         } catch (error: any) {
-            toast.error(error.message);
+            const msg = error.message;
+            if (msg.toLowerCase().includes('limit') || msg.toLowerCase().includes('plan')) {
+                toast.error(
+                    <div className="flex flex-col gap-2">
+                        <span>{msg}</span>
+                        <Button
+                            onClick={() => window.location.href = '/pricing'}
+                            size="sm"
+                            variant="outline"
+                            className="w-fit text-red-500 border-red-500 hover:bg-red-500/10"
+                        >
+                            View Pricing Plans
+                        </Button>
+                    </div>,
+                    { duration: 6000 }
+                );
+            } else {
+                toast.error(msg);
+            }
         } finally {
             setSendingInvite(false);
         }

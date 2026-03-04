@@ -23,16 +23,16 @@ export interface UseImageUploadConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Whether the button should hide when insertion is not available.
    * @default false
    */
-  hideWhenUnavailable?: boolean
+  hideWhenUnavailable?: boolean | undefined
   /**
    * Callback function called after a successful image insertion.
    */
-  onInserted?: () => void
+  onInserted?: (() => void) | undefined
 }
 
 /**

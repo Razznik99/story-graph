@@ -6,7 +6,7 @@ export async function middleware(req: NextRequest) {
     const token = await getToken({ req });
     const isAuth = !!token;
     const isAuthPage = req.nextUrl.pathname.startsWith('/login') || req.nextUrl.pathname.startsWith('/signup');
-    const isPublicPage = req.nextUrl.pathname === '/';
+    const isPublicPage = req.nextUrl.pathname === '/' || '/privacy' || '/refund' || '/terms' || '/pricing';
 
     if (isAuthPage) {
         if (isAuth) {

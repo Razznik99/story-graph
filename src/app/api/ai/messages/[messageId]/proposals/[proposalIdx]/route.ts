@@ -6,16 +6,18 @@ import { authOptions } from '@/lib/auth';
 
 export async function DELETE(
     req: Request,
-    { params }: { params: { messageId: string, proposalIdx: string } }
+    { params }: { params: Promise<{ messageId: string, proposalIdx: string }> }
 ) {
     try {
+        const { messageId, proposalIdx } = await params;
+
         const session = await getServerSession(authOptions);
         if (!session?.user) {
             return new NextResponse('Unauthorized', { status: 401 });
         }
 
         const message = await prisma.aIMessage.findUnique({
-            where: { id: params.messageId },
+            where: { id: messageId },
             include: { chat: true }
         });
 
@@ -30,7 +32,7 @@ export async function DELETE(
         }
 
         const currentProposals = message.proposals ? (message.proposals as any[]) : [];
-        const index = parseInt(params.proposalIdx, 10);
+        const index = parseInt(proposalIdx, 10);
 
         if (isNaN(index) || index < 0 || index >= currentProposals.length) {
             return new NextResponse('Invalid proposal index', { status: 400 });
@@ -41,7 +43,7 @@ export async function DELETE(
 
         // Update the message
         await prisma.aIMessage.update({
-            where: { id: params.messageId },
+            where: { id: messageId },
             data: {
                 proposals: currentProposals.length > 0 ? currentProposals : Prisma.JsonNull
             }

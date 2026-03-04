@@ -18,6 +18,21 @@ datasource db {
 // Enums
 // ======================
 
+enum PlanType {
+  free
+  scribe
+  author
+  shakespeare
+}
+
+enum SubscriptionStatus {
+  active
+  past_due
+  paused
+  canceled
+  trialing
+}
+
 enum StoryStatus {
   Draft
   Serializing
@@ -215,6 +230,16 @@ model User {
   apiKey     String? // Encrypted (conceptually, for now plain text per plan)
   
   aiChats    AIChat[]
+
+  // Billing & Limits
+  plan                  PlanType            @default(free)
+  paddleSubscriptionId  String?
+  paddleCustomerId      String?
+  subscriptionStatus    SubscriptionStatus  @default(active)
+  currentPeriodEnd      DateTime?
+  tokensRemaining       Int                 @default(0)
+  imgGenRemaining       Int                 @default(0)
+  lastTokenRefresh      DateTime?
 }
 
 model Story {

@@ -29,7 +29,7 @@ export interface UseCodeBlockConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Whether the button should hide when code block is not available.
    * @default false
@@ -38,7 +38,7 @@ export interface UseCodeBlockConfig {
   /**
    * Callback function called after a successful code block toggle.
    */
-  onToggled?: () => void
+  onToggled?: (() => void) | undefined
 }
 
 /**

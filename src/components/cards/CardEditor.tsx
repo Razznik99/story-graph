@@ -231,7 +231,11 @@ export default function CardEditor({
                 toast.success(card && !createNewVersion ? 'Card updated' : 'Card created');
                 onClose();
             } else {
-                const errData = await res.json();
+                const errData = await res.json().catch(() => ({}));
+                if (res.status === 403 || res.status === 400) {
+                    setError(errData.error || errData.message || 'Error occurred. Please check your plan limits.');
+                    return;
+                }
                 setError(errData.error || 'Failed to save card');
                 toast.error(errData.error || 'Failed to save card');
             }
@@ -323,9 +327,21 @@ export default function CardEditor({
         <form onSubmit={handleSubmit} className="space-y-6 pt-2">
             {/* ... error display ... */}
             {error && (
-                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium flex items-center gap-2">
-                    <AlertCircle className="w-5 h-5" />
-                    {error}
+                <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400 rounded-xl text-sm font-medium flex flex-col gap-3">
+                    <div className="flex items-center gap-2">
+                        <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                        <span>{error}</span>
+                    </div>
+                    {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('plan')) && (
+                        <Button
+                            type="button"
+                            onClick={() => window.location.href = '/pricing'}
+                            variant="outline"
+                            className="border-red-500/50 text-red-500 hover:bg-red-500/10 self-start text-sm h-8 px-3 mt-1"
+                        >
+                            View Pricing Plans
+                        </Button>
+                    )}
                 </div>
             )}
 

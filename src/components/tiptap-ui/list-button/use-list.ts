@@ -31,7 +31,7 @@ export interface UseListConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The type of list to toggle.
    */
@@ -44,7 +44,7 @@ export interface UseListConfig {
   /**
    * Callback function called after a successful toggle.
    */
-  onToggled?: () => void
+  onToggled?: (() => void) | undefined
 }
 
 export const listIcons = {

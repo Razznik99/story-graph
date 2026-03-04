@@ -62,7 +62,7 @@ export interface LinkMainProps {
 
 export interface LinkPopoverProps
   extends Omit<ButtonProps, "type">,
-    UseLinkPopoverConfig {
+  UseLinkPopoverConfig {
   /**
    * Callback for when the popover opens or closes.
    */
@@ -82,7 +82,7 @@ export const LinkButton = forwardRef<HTMLButtonElement, ButtonProps>(
     return (
       <Button
         type="button"
-        className={className}
+        {...(className ? { className } : {})}
         data-style="ghost"
         role="button"
         tabIndex={-1}
@@ -190,7 +190,7 @@ const LinkMain: React.FC<LinkMainProps> = ({
  * Link content component for standalone use
  */
 export const LinkContent: React.FC<{
-  editor?: Editor | null
+  editor?: Editor | null | undefined
 }> = ({ editor }) => {
   const linkPopover = useLinkPopover({
     editor,

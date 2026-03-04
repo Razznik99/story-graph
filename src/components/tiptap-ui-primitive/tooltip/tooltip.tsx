@@ -151,7 +151,7 @@ export function Tooltip({ children, ...props }: TooltipProviderProps) {
   return (
     <FloatingDelayGroup
       delay={{ open: props.delay ?? 0, close: props.closeDelay ?? 0 }}
-      timeoutMs={props.timeout}
+      {...(props.timeout !== undefined ? { timeoutMs: props.timeout } : {})}
     >
       <TooltipContext.Provider value={tooltip}>
         {children}
@@ -166,9 +166,9 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
     const childrenRef = isValidElement(children)
       ? parseInt(version, 10) >= 19
         ? // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (children as { props: { ref?: React.Ref<any> } }).props.ref
+        (children as { props: { ref?: React.Ref<any> } }).props.ref
         : // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          (children as any).ref
+        (children as any).ref
       : undefined
     const ref = useMergeRefs([context.refs.setReference, propRef, childrenRef])
 

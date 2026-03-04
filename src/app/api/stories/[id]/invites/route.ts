@@ -3,6 +3,7 @@ import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import prisma from '@/lib/prisma';
 import { CollaborationRole } from '@prisma/client';
+import { getUserPlanLimits } from '@/lib/pricing';
 
 export async function POST(
     req: Request,
@@ -38,6 +39,32 @@ export async function POST(
 
         if (story.ownerId !== currentUserId) {
             return new NextResponse('Forbidden: Only owner can invite', { status: 403 });
+        }
+
+        if (role === 'Edit' || role === 'EDIT') {
+            const userWithPlan = await prisma.user.findUnique({
+                where: { id: currentUserId },
+                select: { plan: true, subscriptionStatus: true }
+            });
+
+            if (!userWithPlan) {
+                return new NextResponse('User not found', { status: 404 });
+            }
+
+            const limits = getUserPlanLimits(userWithPlan);
+
+            if (limits.collaborators !== null && limits.collaborators !== Infinity) {
+                const currentEditCollabs = await prisma.collaboration.count({
+                    where: { storyId, role: CollaborationRole.Edit }
+                });
+                const pendingEditInvites = await prisma.collaborationInvite.count({
+                    where: { storyId, role: CollaborationRole.Edit, status: 'PENDING' }
+                });
+
+                if (currentEditCollabs + pendingEditInvites >= limits.collaborators) {
+                    return new NextResponse('Collaboration limit reached for Edit role. Please upgrade your plan.', { status: 403 });
+                }
+            }
         }
 
         // Check if user is already a collaborator

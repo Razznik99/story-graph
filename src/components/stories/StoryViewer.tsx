@@ -20,7 +20,7 @@ interface StoryViewerProps {
     story: any | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    currentUserId?: string;
+    currentUserId?: string | undefined;
     onEdit?: (story: any) => void; // Parent handles opening edit modal
 }
 

@@ -23,16 +23,16 @@ export interface UseLinkPopoverConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Whether to hide the link popover when not available.
    * @default false
    */
-  hideWhenUnavailable?: boolean
+  hideWhenUnavailable?: boolean | undefined
   /**
    * Callback function called when the link is set.
    */
-  onSetLink?: () => void
+  onSetLink?: (() => void) | undefined
 }
 
 /**
@@ -46,7 +46,7 @@ export interface LinkHandlerProps {
   /**
    * Callback function called when the link is set.
    */
-  onSetLink?: () => void
+  onSetLink?: (() => void) | undefined
 }
 
 /**

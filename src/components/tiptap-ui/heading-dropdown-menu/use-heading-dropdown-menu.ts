@@ -25,7 +25,7 @@ export interface UseHeadingDropdownMenuConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Available heading levels to show in the dropdown
    * @default [1, 2, 3, 4, 5, 6]

@@ -6,6 +6,7 @@ import { prisma } from '@/lib/prisma';
 import { checkStoryPermission } from '@/lib/permissions';
 import { CollaborationRole } from '@/domain/roles';
 import { updateStoryTags } from '@/lib/tagUtils';
+import { canCreateEvent } from '@/lib/pricing';
 
 /* -------------------------------------------------------------------------- */
 /*                                    POST                                    */
@@ -25,6 +26,19 @@ export async function POST(req: NextRequest) {
         }
 
         const { storyId, eventTypeId, tags, ...rest } = parsed.data;
+
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { plan: true, subscriptionStatus: true }
+        });
+        if (!user) {
+            return NextResponse.json({ error: 'User not found' }, { status: 401 });
+        }
+
+        const currentEventCount = await prisma.event.count({ where: { storyId } });
+        if (!canCreateEvent(user, currentEventCount)) {
+            return NextResponse.json({ error: 'Event limit reached for this story. Please upgrade your plan.' }, { status: 403 });
+        }
 
         // Permission check
         const permission = await checkStoryPermission(storyId, session.user.id, CollaborationRole.Edit);

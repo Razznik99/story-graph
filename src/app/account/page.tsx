@@ -11,6 +11,8 @@ export default function AccountPage() {
     const [isDeleting, setIsDeleting] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [planData, setPlanData] = useState<any>(null);
+    const [isLoadingPlan, setIsLoadingPlan] = useState(true);
 
     const [formData, setFormData] = useState({
         name: '',
@@ -25,6 +27,21 @@ export default function AccountPage() {
                 username: (session.user as any).username || '',
                 image: session.user.image || '',
             });
+
+            const fetchPlan = async () => {
+                try {
+                    const res = await fetch('/api/user/plan');
+                    if (res.ok) {
+                        const data = await res.json();
+                        setPlanData(data);
+                    }
+                } catch (e) {
+                    console.error(e);
+                } finally {
+                    setIsLoadingPlan(false);
+                }
+            };
+            fetchPlan();
         }
     }, [session]);
 
@@ -208,6 +225,86 @@ export default function AccountPage() {
                             Sign Out
                         </button>
                     </div>
+                )}
+            </div>
+
+            <div className="bg-surface border border-border rounded-xl p-6 shadow-sm mb-8">
+                <div className="flex items-center justify-between mb-6">
+                    <h3 className="text-xl font-bold text-text-primary">Current Plan</h3>
+                    <button
+                        onClick={() => router.push('/pricing')}
+                        className="px-4 py-2 bg-accent text-white rounded-lg hover:bg-accent/90 transition-colors"
+                    >
+                        {planData?.plan === 'free' ? 'Upgrade Plan' : 'Manage Subscription'}
+                    </button>
+                </div>
+
+                {isLoadingPlan ? (
+                    <div className="animate-pulse flex space-x-4">
+                        <div className="flex-1 space-y-4 py-1">
+                            <div className="h-4 bg-border rounded w-1/4"></div>
+                            <div className="space-y-2">
+                                <div className="h-4 bg-border rounded"></div>
+                                <div className="h-4 bg-border rounded w-5/6"></div>
+                            </div>
+                        </div>
+                    </div>
+                ) : planData ? (
+                    <div className="space-y-6">
+                        <div>
+                            <p className="text-sm text-text-secondary uppercase tracking-wider font-semibold mb-1">Active Tier</p>
+                            <p className="text-2xl font-bold text-primary capitalize">{planData.plan}</p>
+                            {planData.subscription.isActive && planData.subscription.currentPeriodEnd && (
+                                <p className="text-xs text-text-secondary mt-1">
+                                    Renews on {new Date(planData.subscription.currentPeriodEnd).toLocaleDateString()}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="bg-background border border-border rounded-lg p-4">
+                                <p className="text-sm font-medium text-text-secondary mb-2">AI Tokens (Monthly)</p>
+                                <div className="flex items-end justify-between mb-2">
+                                    <span className="text-2xl font-bold text-text-primary w-full truncate">
+                                        {planData.usage.tokensRemaining.toLocaleString()}
+                                    </span>
+                                    <span className="text-sm text-text-secondary min-w-[max-content] ml-2">
+                                        / {planData.limits.tokens === Infinity ? 'Unlimited' : planData.limits.tokens.toLocaleString()}
+                                    </span>
+                                </div>
+                                {planData.limits.tokens !== Infinity && (
+                                    <div className="w-full bg-border rounded-full h-2">
+                                        <div
+                                            className="bg-primary h-2 rounded-full transition-all"
+                                            style={{ width: `${Math.min(100, (planData.usage.tokensRemaining / planData.limits.tokens) * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="bg-background border border-border rounded-lg p-4">
+                                <p className="text-sm font-medium text-text-secondary mb-2">Image Generations</p>
+                                <div className="flex items-end justify-between mb-2">
+                                    <span className="text-2xl font-bold text-text-primary w-full truncate">
+                                        {planData.usage.imgGenRemaining.toLocaleString()}
+                                    </span>
+                                    <span className="text-sm text-text-secondary min-w-[max-content] ml-2">
+                                        / {planData.limits.img_gen === Infinity ? 'Unlimited' : planData.limits.img_gen.toLocaleString()}
+                                    </span>
+                                </div>
+                                {planData.limits.img_gen !== Infinity && (
+                                    <div className="w-full bg-border rounded-full h-2">
+                                        <div
+                                            className="bg-accent h-2 rounded-full transition-all"
+                                            style={{ width: `${Math.min(100, (planData.usage.imgGenRemaining / planData.limits.img_gen) * 100)}%` }}
+                                        ></div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ) : (
+                    <p className="text-text-secondary">Failed to load plan details.</p>
                 )}
             </div>
 

@@ -6,6 +6,8 @@ import prisma from '@/lib/prisma';
 import { CreateStorySchema } from '@/domain/schemas/story.schema';
 import { z } from 'zod';
 
+import { canCreateStory } from '@/lib/pricing';
+
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
@@ -244,26 +246,40 @@ export async function POST(req: Request) {
     try {
         let userId = (session.user as any).id;
 
+        let currentUser;
         // Robust lookup: if ID missing or we want to be safe, check DB by email
         if (!userId && session.user.email) {
-            const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-            userId = user?.id;
+            currentUser = await prisma.user.findUnique({
+                where: { email: session.user.email },
+                select: { id: true, plan: true, subscriptionStatus: true, _count: { select: { stories: true } } }
+            });
+            userId = currentUser?.id;
         } else if (userId) {
             // Verify user exists to avoid FK error
-            const userExists = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-            if (!userExists) {
+            currentUser = await prisma.user.findUnique({
+                where: { id: userId },
+                select: { id: true, plan: true, subscriptionStatus: true, _count: { select: { stories: true } } }
+            });
+            if (!currentUser) {
                 // Fallback to email if stale ID
                 if (session.user.email) {
-                    const user = await prisma.user.findUnique({ where: { email: session.user.email } });
-                    userId = user?.id;
+                    currentUser = await prisma.user.findUnique({
+                        where: { email: session.user.email },
+                        select: { id: true, plan: true, subscriptionStatus: true, _count: { select: { stories: true } } }
+                    });
+                    userId = currentUser?.id;
                 } else {
                     userId = null;
                 }
             }
         }
 
-        if (!userId) {
+        if (!userId || !currentUser) {
             return new NextResponse('Unauthorized: User not found', { status: 401 });
+        }
+
+        if (!canCreateStory(currentUser, currentUser._count.stories)) {
+            return new NextResponse('Story limit reached. Please upgrade your plan to create more stories.', { status: 403 });
         }
 
         const body = await req.json();

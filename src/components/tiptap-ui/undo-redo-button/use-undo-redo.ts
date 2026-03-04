@@ -22,7 +22,7 @@ export interface UseUndoRedoConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The history action to perform (undo or redo).
    */
@@ -31,11 +31,11 @@ export interface UseUndoRedoConfig {
    * Whether the button should hide when action is not available.
    * @default false
    */
-  hideWhenUnavailable?: boolean
+  hideWhenUnavailable?: boolean | undefined
   /**
    * Callback function called after a successful action execution.
    */
-  onExecuted?: () => void
+  onExecuted?: (() => void) | undefined
 }
 
 export const UNDO_REDO_SHORTCUT_KEYS: Record<UndoRedoAction, string> = {

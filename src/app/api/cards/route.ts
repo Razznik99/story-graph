@@ -9,6 +9,7 @@ import { prisma } from '@/lib/prisma'
 import { checkStoryPermission } from '@/lib/permissions'
 import { CollaborationRole } from '@/domain/roles'
 import { updateStoryTags } from '@/lib/tagUtils'
+import { canCreateCard } from '@/lib/pricing'
 
 /* -------------------------------------------------------------------------- */
 /*                                  Helpers                                   */
@@ -77,6 +78,19 @@ export async function POST(req: NextRequest) {
         }
 
         const { storyId, cardTypeId, attributes, identityId, sourceCardId, ...rest } = parsed.data
+
+        const user = await prisma.user.findUnique({
+            where: { id: session.user.id },
+            select: { plan: true, subscriptionStatus: true }
+        })
+        if (!user) {
+            return NextResponse.json({ error: 'User not found' }, { status: 401 })
+        }
+
+        const currentCardCount = await prisma.card.count({ where: { storyId } })
+        if (!canCreateCard(user, currentCardCount)) {
+            return NextResponse.json({ error: 'Card limit reached for this story. Please upgrade your plan.' }, { status: 403 })
+        }
 
         const permission = await checkStoryPermission(storyId, session.user.id, CollaborationRole.Edit)
         if (!permission.authorized) {

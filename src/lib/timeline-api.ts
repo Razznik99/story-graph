@@ -12,6 +12,7 @@ export type TLNode = Timeline & {
     children?: TLNode[]; // For client-side tree structure
     events?: Event[]; // Included from API
     expanded?: boolean; // For client-side UI state
+    position?: number[]; // Added for sorting
 };
 
 // PlacedEvent type from reference, adapted for our schema

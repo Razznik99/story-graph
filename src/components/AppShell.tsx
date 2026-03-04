@@ -45,7 +45,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         { name: 'Settings', href: '/settings', icon: Settings },
     ];
 
-    if (['/', '/login', '/signup'].includes(pathname)) {
+    if (['/', '/login', '/privacy', '/refund', '/terms', '/pricing'].includes(pathname)) {
         return <>{children}</>;
     }
 

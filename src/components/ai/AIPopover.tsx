@@ -240,6 +240,24 @@ export function AIPopover() {
                 })
             });
 
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (res.status === 403 || res.status === 400) {
+                    setMessages(prev => [
+                        ...prev,
+                        {
+                            id: Date.now().toString(),
+                            chatId: currentChatId || 'temp',
+                            role: 'assistant',
+                            content: `**Rate Limit Reached:** ${errData.error || errData.message || 'Please check your plan limits.'}\n\n[View Pricing Plans](/pricing)`,
+                            createdAt: new Date().toISOString()
+                        }
+                    ]);
+                    return;
+                }
+                throw new Error('Failed to fetch AI response');
+            }
+
             const data = await res.json();
 
             if (!currentChatId && data.chatId) {

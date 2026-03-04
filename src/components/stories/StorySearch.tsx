@@ -53,7 +53,10 @@ export default function StorySearch({ search, onSearchChange, placeholder }: Sto
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === 'Enter' && isOpen && filteredTags.length > 0) {
             e.preventDefault();
-            handleSelectTag(filteredTags[0].name);
+            const firstTag = filteredTags[0];
+            if (firstTag) {
+                handleSelectTag(firstTag.name);
+            }
         }
     };
 

@@ -12,7 +12,7 @@ export async function generateChatTitle(firstMessage: string) {
         const prompt = `Generate a title for a chat that starts with: "${firstMessage}"`;
 
         const result = await client.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash-lite",
             contents: [{
                 role: "user",
                 parts: [{ text: prompt }]

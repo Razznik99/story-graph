@@ -29,7 +29,7 @@ export interface UseBlockquoteConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Whether the button should hide when blockquote is not available.
    * @default false
@@ -38,7 +38,7 @@ export interface UseBlockquoteConfig {
   /**
    * Callback function called after a successful toggle.
    */
-  onToggled?: () => void
+  onToggled?: (() => void) | undefined
 }
 
 /**

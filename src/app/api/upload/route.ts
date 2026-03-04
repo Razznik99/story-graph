@@ -3,11 +3,34 @@ import { PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { r2, R2_BUCKET_NAME, PUBLIC_DEV_URL } from '@/lib/r2';
 import { v4 as uuidv4 } from 'uuid';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+import { prisma } from '@/lib/prisma';
+import { getUserPlanLimits } from '@/lib/pricing';
 
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const filename = searchParams.get('filename');
     const contentType = searchParams.get('contentType');
+
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.email) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { plan: true, subscriptionStatus: true }
+    });
+
+    if (!user) {
+        return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const limits = getUserPlanLimits(user);
+    if (limits.img_upload <= 0) {
+        return NextResponse.json({ error: 'Upload limit reached. Please upgrade.' }, { status: 403 });
+    }
 
     if (!filename || !contentType) {
         return NextResponse.json({ error: 'Missing filename or contentType' }, { status: 400 });

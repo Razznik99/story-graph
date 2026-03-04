@@ -29,7 +29,7 @@ export interface UseListDropdownMenuConfig {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * The list types to display in the dropdown.
    * @default ["bulletList", "orderedList", "taskList"]

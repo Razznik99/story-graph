@@ -22,7 +22,7 @@ import { Badge } from "@/components/tiptap-ui-primitive/badge"
 
 export interface BlockquoteButtonProps
   extends Omit<ButtonProps, "type">,
-    UseBlockquoteConfig {
+  UseBlockquoteConfig {
   /**
    * Optional text to display alongside the icon.
    */
@@ -76,7 +76,7 @@ export const BlockquoteButton = forwardRef<
     } = useBlockquote({
       editor,
       hideWhenUnavailable,
-      onToggled,
+      ...(onToggled !== undefined ? { onToggled } : {}),
     })
 
     const handleClick = useCallback(

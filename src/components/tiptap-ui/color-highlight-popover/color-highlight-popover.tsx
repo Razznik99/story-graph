@@ -42,7 +42,7 @@ export interface ColorHighlightPopoverContentProps {
   /**
    * The Tiptap editor instance.
    */
-  editor?: Editor | null
+  editor?: Editor | null | undefined
   /**
    * Optional colors to use in the highlight popover.
    * If not provided, defaults to a predefined set of colors.
@@ -52,10 +52,10 @@ export interface ColorHighlightPopoverContentProps {
 
 export interface ColorHighlightPopoverProps
   extends Omit<ButtonProps, "type">,
-    Pick<
-      UseColorHighlightConfig,
-      "editor" | "hideWhenUnavailable" | "onApplied"
-    > {
+  Pick<
+    UseColorHighlightConfig,
+    "editor" | "hideWhenUnavailable" | "onApplied"
+  > {
   /**
    * Optional colors to use in the highlight popover.
    * If not provided, defaults to a predefined set of colors.
@@ -69,7 +69,7 @@ export const ColorHighlightPopoverButton = forwardRef<
 >(({ className, children, ...props }, ref) => (
   <Button
     type="button"
-    className={className}
+    {...(className ? { className } : {})}
     data-style="ghost"
     data-appearance="default"
     role="button"

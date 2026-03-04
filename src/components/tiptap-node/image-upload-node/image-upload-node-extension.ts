@@ -80,9 +80,6 @@ export const ImageUploadNode = Node.create<ImageUploadNodeOptions>({
       accept: "image/*",
       limit: 1,
       maxSize: 0,
-      upload: undefined,
-      onError: undefined,
-      onSuccess: undefined,
       HTMLAttributes: {},
     }
   },
@@ -120,12 +117,12 @@ export const ImageUploadNode = Node.create<ImageUploadNodeOptions>({
     return {
       setImageUploadNode:
         (options) =>
-        ({ commands }) => {
-          return commands.insertContent({
-            type: this.name,
-            attrs: options,
-          })
-        },
+          ({ commands }) => {
+            return commands.insertContent({
+              type: this.name,
+              attrs: options,
+            })
+          },
     }
   },
 

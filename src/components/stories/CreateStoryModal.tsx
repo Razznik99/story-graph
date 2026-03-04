@@ -18,7 +18,7 @@ import ImageUpload from '@/components/ImageUpload';
 import GenrePicker from '@/components/GenrePicker';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertCircle } from 'lucide-react';
 import {
     LANGUAGES,
     STORY_MEDIUM,
@@ -35,6 +35,7 @@ interface CreateStoryModalProps {
 export default function CreateStoryModal({ open, onOpenChange, story }: CreateStoryModalProps) {
     const router = useRouter();
     const [loading, setLoading] = useState(false);
+    const [error, setError] = useState('');
 
     // Fields - Initialize with story data if available
     const [title, setTitle] = useState(story?.title || '');
@@ -71,6 +72,7 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
+        setError('');
 
         try {
             const url = story ? `/api/stories/${story.id}` : '/api/stories';
@@ -93,7 +95,14 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
                 }),
             });
 
-            if (!res.ok) throw new Error(`Failed to ${story ? 'update' : 'create'} story`);
+            if (!res.ok) {
+                const errData = await res.json().catch(() => ({}));
+                if (res.status === 403 || res.status === 400) {
+                    setError(errData.error || errData.message || 'Error occurred. Please check your plan limits.');
+                    return; // Stop execution
+                }
+                throw new Error(`Failed to ${story ? 'update' : 'create'} story`);
+            }
 
             const result = await res.json();
             onOpenChange(false);
@@ -101,8 +110,9 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
             if (!story) {
                 router.push(`/stories?new=${result.id}`);
             }
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
+            setError(error.message || 'An unexpected error occurred');
         } finally {
             setLoading(false);
         }
@@ -118,24 +128,24 @@ export default function CreateStoryModal({ open, onOpenChange, story }: CreateSt
                     <DialogTitle className="text-2xl font-bold text-accent">{story ? 'Edit Story' : 'Create New Story'}</DialogTitle>
                 </DialogHeader>
                 <form onSubmit={handleSubmit} className="space-y-6 pt-2">
-                    {/* ... fields ... */}
-                    {/* (Omitting fields update here as they are contiguous, only updating footer/header in this chunk if possible, 
-                        but effectively I need to re-render the whole form if I want to update values? 
-                        No, the state initialization above only runs ONCE on mount. 
-                        I MUST add useEffect to sync state if I want reusing the modal.
-                        Since I can't add useEffect easily in the previous tool call without importing it, 
-                        I'll assume `key={story?.id}` or similar in parent is used to force remount, 
-                        OR I insert `useEffect` now. 
-                        Let's insert `useEffect` in usage.)
-                    */}
-
-                    {/* Actually, user might close and "Create New", which has story=undefined. 
-                        If I don't use useEffect, state won't reset. 
-                        I'll use `key` in parent for simplicity OR add useEffect. 
-                        Using `key` in parent is cleaner: <CreateStoryModal key={selectedStory?.id || 'new'} ... />
-                        So I will just handle the text changes here.
-                    */}
-
+                    {error && (
+                        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-lg flex flex-col gap-3">
+                            <div className="flex items-center gap-2 text-red-500 font-medium">
+                                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                                <span>{error}</span>
+                            </div>
+                            {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('plan')) && (
+                                <Button
+                                    type="button"
+                                    onClick={() => router.push('/pricing')}
+                                    variant="outline"
+                                    className="border-red-500/50 text-red-500 hover:bg-red-500/10 self-start text-sm h-8 px-3"
+                                >
+                                    View Pricing Plans
+                                </Button>
+                            )}
+                        </div>
+                    )}
                     {/* Top Row: Basic Info */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-2">

@@ -7,6 +7,7 @@ import { authOptions } from "@/lib/auth";
 import { getSystemInstruction } from "@/lib/ai/system-instructions";
 import { tools, runTool } from "@/lib/ai/tools";
 import { generateChatTitle } from "@/app/api/ai/chats/route";
+import { getUserPlanLimits } from "@/lib/pricing";
 
 
 const client = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "" });
@@ -19,6 +20,23 @@ export async function POST(req: Request) {
     }
 
     try {
+        const user = await prisma.user.findUnique({
+            where: { email: session.user.email },
+            select: { id: true, plan: true, subscriptionStatus: true, tokensRemaining: true }
+        });
+
+        if (!user) {
+            return NextResponse.json({ error: "User not found" }, { status: 401 });
+        }
+
+        const limits = getUserPlanLimits(user);
+        if (limits.tokens === 0) {
+            return NextResponse.json({ error: "AI features require a paid plan. Please upgrade." }, { status: 403 });
+        }
+        if (user.tokensRemaining <= 0) {
+            return NextResponse.json({ error: "AI token limit reached for your current billing period." }, { status: 403 });
+        }
+
         const { messages, chatId, context, mode } = await req.json();
 
         // Verify chat ownership if chatId is provided
@@ -82,6 +100,7 @@ export async function POST(req: Request) {
         // Tool execution loop
         let finalResponseText = "";
         let accumulatedProposals: any[] = []; // Store intercepted proposals
+        let totalTokenUsage = 0;
 
         let iteration = 0;
         const MAX_ITERATIONS = 10;
@@ -95,6 +114,8 @@ export async function POST(req: Request) {
                 contents: contents,
                 config: config,
             });
+
+            totalTokenUsage += result.usageMetadata?.totalTokenCount || 0;
 
             // Check for functional calls
             const functionCalls = result.functionCalls;
@@ -178,6 +199,14 @@ export async function POST(req: Request) {
         if (iteration >= MAX_ITERATIONS) {
             throw new Error("Tool loop exceeded max iterations");
         }
+
+        // Deduct Tokens
+        if (totalTokenUsage === 0) totalTokenUsage = 500; // Fallback
+        await prisma.user.update({
+            where: { id: user.id },
+            data: { tokensRemaining: Math.max(0, user.tokensRemaining - totalTokenUsage) }
+        });
+
         let finalChatId = chatId;
 
         if (!finalChatId) {

@@ -245,7 +245,11 @@ export default function EventEditor({
                 }
 
             } else {
-                const errData = await res.json();
+                const errData = await res.json().catch(() => ({}));
+                if (res.status === 403 || res.status === 400) {
+                    setError(errData.error || errData.message || 'Error occurred. Please check your plan limits.');
+                    return;
+                }
                 setError(errData.error || 'Failed to save event');
                 toast.error(errData.error || 'Failed to save event');
             }
@@ -286,9 +290,21 @@ export default function EventEditor({
 
             <form onSubmit={handleSubmit} className={inline ? "space-y-6 py-4 flex-1 overflow-y-auto px-1" : "space-y-6 py-4"}>
                 {error && (
-                    <div className="p-3 bg-red-500/10 border border-red-500/20 text-red-600 rounded-lg flex items-center gap-2 text-sm">
-                        <AlertCircle className="w-4 h-4" />
-                        {error}
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 text-red-600 rounded-lg flex flex-col gap-3 text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                        {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('plan')) && (
+                            <Button
+                                type="button"
+                                onClick={() => window.location.href = '/pricing'}
+                                variant="outline"
+                                className="border-red-500/50 text-red-500 hover:bg-red-500/10 self-start text-sm h-8 px-3 mt-1"
+                            >
+                                View Pricing Plans
+                            </Button>
+                        )}
                     </div>
                 )}
 

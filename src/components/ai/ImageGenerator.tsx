@@ -7,7 +7,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, Wand2 } from 'lucide-react';
+import { Loader2, Wand2, AlertCircle } from 'lucide-react';
 import { toast } from 'sonner';
 
 const STYLE_PRESETS = [
@@ -30,6 +30,7 @@ export default function ImageGenerator({ open, onOpenChange, imageType, onGenera
     const [cfgScale, setCfgScale] = useState(7);
     const [stylePreset, setStylePreset] = useState('cinematic');
     const [isGenerating, setIsGenerating] = useState(false);
+    const [error, setError] = useState('');
 
     useEffect(() => {
         if (open && initialPrompt) {
@@ -44,6 +45,7 @@ export default function ImageGenerator({ open, onOpenChange, imageType, onGenera
         }
 
         setIsGenerating(true);
+        setError('');
 
         const width = imageType === 'cover' ? 896 : 1024;
         const height = imageType === 'cover' ? 1152 : 1024;
@@ -62,7 +64,11 @@ export default function ImageGenerator({ open, onOpenChange, imageType, onGenera
             });
 
             if (!res.ok) {
-                const data = await res.json();
+                const data = await res.json().catch(() => ({}));
+                if (res.status === 403 || res.status === 400) {
+                    setError(data.error || data.message || 'Image generation limit reached. Please upgrade your plan.');
+                    return;
+                }
                 throw new Error(data.error || 'Failed to generate image');
             }
 
@@ -99,7 +105,26 @@ export default function ImageGenerator({ open, onOpenChange, imageType, onGenera
                     </DialogTitle>
                 </DialogHeader>
 
-                <div className="space-y-4 py-4">
+                {error && (
+                    <div className="p-4 mx-6 mt-4 bg-red-500/10 border border-red-500/20 text-red-600 rounded-lg flex flex-col gap-3 text-sm font-medium">
+                        <div className="flex items-center gap-2">
+                            <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                            <span>{error}</span>
+                        </div>
+                        {(error.toLowerCase().includes('limit') || error.toLowerCase().includes('plan')) && (
+                            <Button
+                                type="button"
+                                onClick={() => window.location.href = '/pricing'}
+                                variant="outline"
+                                className="border-red-500/50 text-red-500 hover:bg-red-500/10 self-start text-sm h-8 px-3 mt-1"
+                            >
+                                View Pricing Plans
+                            </Button>
+                        )}
+                    </div>
+                )}
+
+                <div className="space-y-4 py-4 px-6 pt-0 mt-4">
                     <div className="space-y-2">
                         <Label>Prompt</Label>
                         <Textarea

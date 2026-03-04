@@ -123,7 +123,7 @@ export default function Home() {
               <a href="#architecture" className="text-[#d1ccc2] hover:text-amber-500 transition-colors text-sm font-medium">Architecture</a>
               <a href="#ai-features" className="text-[#d1ccc2] hover:text-amber-500 transition-colors text-sm font-medium">AI Features</a>
               <a href="#why-it-matters" className="text-[#d1ccc2] hover:text-amber-500 transition-colors text-sm font-medium">Philosophy</a>
-              <a href="#pricing" className="text-[#d1ccc2] hover:text-amber-500 transition-colors text-sm font-medium">Pricing</a>
+              <Link href="/pricing" className="text-[#d1ccc2] hover:text-amber-500 transition-colors text-sm font-medium">Pricing</Link>
             </div>
 
             <div className="flex items-center gap-4">
@@ -402,7 +402,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>200 Image Uploads</span>
+                  <span>500 Image Uploads</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -410,7 +410,7 @@ export default function Home() {
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>2k Cards & 2k Events</span>
+                  <span>1k Cards & Events per Story</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm opacity-50">
                   <X className="w-5 h-5 flex-shrink-0 mt-0.5" />
@@ -433,15 +433,15 @@ export default function Home() {
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>1 Million AI Tokens / month</span>
+                  <span>2 Million AI Tokens / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>100 AI Images / month</span>
+                  <span>150 AI Images / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>1k Image Uploads / month</span>
+                  <span>1500 Image Uploads / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -477,11 +477,11 @@ export default function Home() {
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>2.5 Million AI Tokens</span>
+                  <span>5 Million AI Tokens</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>300 AI Images / month</span>
+                  <span>500 AI Images / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
@@ -516,15 +516,15 @@ export default function Home() {
               <ul className="space-y-4 mb-8 flex-1">
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>6 Million AI Tokens</span>
+                  <span>10 Million AI Tokens</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>700 AI Images / month</span>
+                  <span>1000 AI Images / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                  <span>Unlimited Image Uploads</span>
+                  <span>10k Image Uploads / month</span>
                 </li>
                 <li className="flex items-start gap-3 text-[#d1ccc2] text-sm">
                   <Check className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
