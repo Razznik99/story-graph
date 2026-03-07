@@ -92,11 +92,10 @@ export async function GET(
             prisma.card.count({ where: { storyId } }),
             // 3. Event Count
             prisma.event.count({ where: { storyId } }),
-            // 4. Level 5 Count (Chapters)
-            prisma.timeline.count({
+            // 4. Leaf Count
+            prisma.leaf.count({
                 where: {
-                    storyId,
-                    level: 5
+                    branch: { timeline: { storyId } }
                 }
             }),
             // 5. Collaborator Count (Accepted)
@@ -156,10 +155,11 @@ export async function GET(
                     }
                 }
             }),
-            // 10. Timeline Config for Level 5 Name
-            prisma.timelineConfig.findUnique({
+            // 10. Timeline for Leaf Name
+            prisma.timeline.findFirst({
                 where: { storyId },
-                select: { level5Name: true }
+                select: { leafName: true },
+                orderBy: { createdAt: 'desc' }
             })
         ]);
 
@@ -170,7 +170,7 @@ export async function GET(
                 events: eventCount,
                 level5: level5Count,
                 collaborators: collaboratorCount,
-                level5Name: timelineConfig?.level5Name ?? 'Chapter'
+                level5Name: timelineConfig?.leafName ?? 'Leaf'
             },
             comments: recentComments,
             suggestions: pendingSuggestions,

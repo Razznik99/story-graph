@@ -73,14 +73,12 @@ export const tools = [
         description: "Retrieve events",
         parameters: {
             type: "object",
-            properties: {
-                timelineId: { type: "string" }
-            }
+            properties: {}
         }
     },
     {
         name: "getTimelineEvents",
-        description: "Retrieve all events for a specific timeline",
+        description: "Retrieve all events for a specific timeline via branches and leaves",
         parameters: {
             type: "object",
             properties: {
@@ -223,27 +221,25 @@ export async function runTool(name: string, args: any, context?: any): Promise<a
             case "getTimelines":
                 return await prisma.timeline.findMany({
                     where: { storyId },
-                    select: { id: true, name: true, title: true, level: true, parentId: true },
-                    orderBy: { level: 'asc' }
+                    select: { id: true, name: true },
+                    orderBy: { createdAt: 'asc' }
                 });
 
             case "getEvents":
-                const eventWhere: any = { storyId };
-                if (args.timelineId) eventWhere.timelineId = args.timelineId;
-
                 return await prisma.event.findMany({
-                    where: eventWhere,
-                    select: { id: true, title: true, eventTypeId: true, timelineId: true, order: true },
-                    orderBy: { order: 'asc' },
+                    where: { storyId },
+                    select: { id: true, title: true, eventTypeId: true, intensity: true },
+                    orderBy: { createdAt: 'asc' },
                     take: 100
                 });
 
             case "getTimelineEvents":
                 if (!args.timelineId) return { error: "timelineId is required" };
-                return await prisma.event.findMany({
-                    where: { storyId, timelineId: args.timelineId },
-                    select: { id: true, title: true, eventTypeId: true, order: true },
-                    orderBy: { order: 'asc' }
+                return await prisma.timeline.findUnique({
+                    where: { id: args.timelineId },
+                    include: {
+                        branches: { include: { leaves: { include: { nodes: { include: { event: true } } } } } }
+                    }
                 });
 
             case "getCard":
@@ -257,7 +253,7 @@ export async function runTool(name: string, args: any, context?: any): Promise<a
                 if (!args.eventId) return { error: "eventId is required" };
                 return await prisma.event.findFirst({
                     where: { id: args.eventId, storyId },
-                    include: { eventType: true, timeline: true, linkedCards: { include: { card: true, role: true } } }
+                    include: { eventType: true, linkedCards: { include: { card: true, role: true } } }
                 });
             case "getStoryGraphSummary":
                 return {

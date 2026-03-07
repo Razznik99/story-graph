@@ -10,8 +10,7 @@ import { Note } from '@/domain/types/index';
 import TimelineEventsSidebar from './TimelineEventsSidebar';
 import { cn } from '@/lib/utils';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getTimelineConfig, listTLNodes, updateTLNodeLabel } from '@/lib/timeline-api';
-import { getDerivedNumber, getLevelName } from '@/components/timeline/timeline-explorer-helpers';
+import { getTimelineGraphs, renameTimeline, renameBranch, renameLeaf } from '@/lib/timeline-api';
 import {
     AlertDialog,
     AlertDialogAction,
@@ -42,26 +41,39 @@ export default function NoteEditor({ note, storyId, onSave, onDelete, onCancel, 
     const [isSaving, setIsSaving] = useState(false);
     const [showSidebar, setShowSidebar] = useState(true);
 
-    const { data: cfg } = useQuery({
-        queryKey: ['tl', 'config', storyId],
-        queryFn: () => getTimelineConfig(storyId),
+    const { data: graphs = [] } = useQuery({
+        queryKey: ['tl', 'graphs', storyId],
+        queryFn: () => getTimelineGraphs(storyId),
         enabled: isTimelineNote && !!storyId,
     });
 
-    const { data: nodes = [] } = useQuery({
-        queryKey: ['tl', 'nodes', storyId],
-        queryFn: () => listTLNodes(storyId),
-        enabled: isTimelineNote && !!storyId,
-    });
-
-    const timelineNode = isTimelineNote && note?.timelineId ? nodes.find(n => n.id === note.timelineId) : null;
     let timelinePrefix = "Timeline Note";
+    let targetLevel: 'timeline' | 'branch' | 'leaf' | null = null;
+    let targetId: string | null = null;
 
-    if (timelineNode && cfg) {
-        const levelName = timelineNode.name || getLevelName(timelineNode.level, cfg);
-        const orderNum = getDerivedNumber(timelineNode, nodes, cfg);
-        const isSingleRoot = cfg.timelineType === 'single' && timelineNode.level === 1;
-        timelinePrefix = isSingleRoot ? levelName : `${levelName} ${orderNum}`;
+    if (isTimelineNote && graphs.length > 0) {
+        if (note?.timelineId) { targetLevel = 'timeline'; targetId = note.timelineId; }
+        else if ((note as any)?.branchId) { targetLevel = 'branch'; targetId = (note as any).branchId; }
+        else if ((note as any)?.leafId) { targetLevel = 'leaf'; targetId = (note as any).leafId; }
+
+        if (targetId) {
+            let nodeName = "Timeline Item";
+            for (const g of graphs) {
+                if (g.id === targetId) { nodeName = g.name; break; }
+                for (const b of g.branches) {
+                    if (b.id === targetId) {
+                        if (b.level === 1) nodeName = g.branch1Name;
+                        else if (b.level === 2) nodeName = g.branch2Name || g.branch1Name;
+                        else if (b.level === 3) nodeName = g.branch3Name || g.branch2Name || g.branch1Name;
+                        break;
+                    }
+                    for (const l of b.leaves || []) {
+                        if (l.id === targetId) { nodeName = g.leafName; break; }
+                    }
+                }
+            }
+            timelinePrefix = `${nodeName} Note`;
+        }
     }
 
     // If existing note changes (e.g. selection), update state
@@ -87,10 +99,11 @@ export default function NoteEditor({ note, storyId, onSave, onDelete, onCancel, 
                 storyId, // Ensure storyId is passed for new notes
             });
 
-            if (isTimelineNote && note?.timelineId && title !== note?.title) {
-                // Also update the timeline node title if it changed
-                await updateTLNodeLabel(note.timelineId, title);
-                queryClient.invalidateQueries({ queryKey: ['tl', 'nodes', storyId] });
+            if (isTimelineNote && targetId && title !== note?.title) {
+                if (targetLevel === 'timeline') await renameTimeline(targetId, title);
+                else if (targetLevel === 'branch') await renameBranch(targetId, title);
+                else if (targetLevel === 'leaf') await renameLeaf(targetId, title);
+                queryClient.invalidateQueries({ queryKey: ['tl', 'graphs', storyId] });
             }
 
             // Don't close automatically, maybe just toast? User might want to keep editing.

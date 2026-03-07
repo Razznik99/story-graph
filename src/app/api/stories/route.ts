@@ -480,24 +480,13 @@ export async function POST(req: Request) {
             }
 
 
-            // 6. Create Default Timeline Config & Root Node
-            await tx.timelineConfig.create({
-                data: {
-                    storyId: newStory.id,
-                    timelineType: 'single',
-                    level1Name: 'Story',
-                    level5Name: 'Chapter',
-                    confirmed: true,
-                }
-            });
-
+            // 6. Create Default Timeline Node
             const rootTimelineNode = await tx.timeline.create({
                 data: {
                     storyId: newStory.id,
-                    title: '',
-                    name: 'Story', // Root node name
-                    level: 1,
-                    orderKey: 1000,
+                    name: newStory.title,
+                    branch1Name: 'Volume',
+                    leafName: 'Chapter',
                 }
             });
 

@@ -13,7 +13,6 @@ import { toast } from 'sonner';
 import ImageUpload from '@/components/ImageUpload';
 import { useQuery } from '@tanstack/react-query';
 import { useStoryStore } from '@/store/useStoryStore';
-import TimelineField from '@/components/events/TimelineField';
 
 interface SchemaField {
     name: string;
@@ -240,13 +239,7 @@ export function CreateEntityPrimitive({ type, initialData, schema, onAccept, onR
                             </Select>
                         )}
 
-                        {field.type === 'select' && field.name === 'timelineId' && storyId && (
-                            <TimelineField
-                                storyId={storyId}
-                                value={data[field.name] || null}
-                                onChange={(val) => handleChange(field.name, val)}
-                            />
-                        )}
+
 
                         {field.type === 'json' && (
                             <Textarea

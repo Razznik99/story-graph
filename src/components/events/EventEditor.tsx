@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { Event, EventType, EventIntensity, EventVisibility } from '@/domain/types';
-import TimelineField from './TimelineField';
 import LinkedCardsEditor from './LinkedCardsEditor';
 import LinkedEventsEditor from './LinkedEventsEditor';
 import InverseRelationManager from './InverseRelationManager';
@@ -12,6 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { duplicateEvent } from '@/lib/timeline-api';
 import {
     Dialog,
     DialogContent,
@@ -48,7 +48,6 @@ export default function EventEditor({
         visibility: 'PUBLIC' as EventVisibility,
         outcome: '',
         tags: [] as string[],
-        timelineId: '',
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState('');
@@ -85,7 +84,6 @@ export default function EventEditor({
                 visibility: event.visibility,
                 outcome: event.outcome || '',
                 tags: event.tags || [],
-                timelineId: event.timelineId || '',
             });
 
             // Fetch relations
@@ -408,15 +406,6 @@ export default function EventEditor({
                     />
                 </div>
 
-                <div className="space-y-2">
-                    <Label>Timeline</Label>
-                    <TimelineField
-                        storyId={storyId}
-                        value={formData.timelineId}
-                        onChange={(timelineId) => setFormData(prev => ({ ...prev, timelineId: timelineId || '' }))}
-                    />
-                </div>
-
                 <div className="pt-4 border-t border-border space-y-6">
                     <LinkedCardsEditor
                         storyId={storyId}
@@ -433,26 +422,52 @@ export default function EventEditor({
                 </div>
             </form>
 
-            <DialogFooter className="flex justify-between sm:justify-between w-full p-4 border-t border-border mt-4">
-                {event ? (
-                    <Button
-                        type="button"
-                        variant="ghost"
-                        onClick={handleDelete}
-                        className="text-red-500 hover:text-text-primary hover:bg-red-500"
-                    >
-                        <Trash className="w-5 h-5" />
-                    </Button>
-                ) : <div />}
+            <div className="flex w-full p-4 border-t border-border mt-4 shrink-0 bg-surface">
+                <div className="flex w-full items-center justify-between">
+                    <div className="flex gap-2">
+                        {event ? (
+                            <Button
+                                type="button"
+                                variant="ghost"
+                                onClick={handleDelete}
+                                className="text-red-500 hover:text-text-primary hover:bg-red-500"
+                                title="Delete Event"
+                            >
+                                <Trash className="w-5 h-5" />
+                            </Button>
+                        ) : <div />}
+                    </div>
 
-                <div className="flex gap-2">
-                    {!inline && <Button variant="ghost" onClick={onClose}>Cancel</Button>}
-                    <Button onClick={() => handleSubmit()} disabled={isSubmitting || !formData.title || !formData.eventTypeId} className="bg-accent text-accent-foreground">
-                        {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                        {event ? 'Save Changes' : 'Create Event'}
-                    </Button>
+                    <div className="flex gap-2">
+                        {!inline && <Button type="button" variant="ghost" onClick={onClose} disabled={isSubmitting}>Cancel</Button>}
+                        {event && (
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={async () => {
+                                    setIsSubmitting(true);
+                                    try {
+                                        await duplicateEvent(event.id, storyId);
+                                        toast.success('Event duplicated successfully');
+                                        onClose();
+                                    } catch (e: any) {
+                                        toast.error(e.message || 'Failed to duplicate event');
+                                    } finally {
+                                        setIsSubmitting(false);
+                                    }
+                                }}
+                                disabled={isSubmitting}
+                            >
+                                Duplicate
+                            </Button>
+                        )}
+                        <Button type="button" onClick={() => handleSubmit()} disabled={isSubmitting || !formData.title || !formData.eventTypeId} className="bg-accent text-accent-foreground">
+                            {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            {event ? 'Save Changes' : 'Create Event'}
+                        </Button>
+                    </div>
                 </div>
-            </DialogFooter>
+            </div>
         </div>
     );
 

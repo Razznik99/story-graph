@@ -1,0 +1,134 @@
+---
+
+## Timeline
+
+Just container.
+
+```
+Timeline
+- id
+- storyId
+- name
+- title
+- index (int)
+```
+
+---
+
+## Branch (Semantic Only)
+
+```
+Branch
+- id
+- timelineId
+- name
+- title
+- parentBranchId
+- level (1-3)
+- orderKey
+```
+
+No flow logic here.
+Just grouping.
+
+---
+
+## Leaf
+
+```
+Leaf
+- id
+- branchId
+- name
+- title
+- orderKey
+- node (Nodes[])
+```
+
+Leaf is your graph canvas.
+
+---
+
+## Node
+
+```
+Node
+- id
+- leafId
+- eventId? (nullable if connector)
+- type: START | END | EVENT | CONNECTOR
+```
+
+---
+
+## Edge
+
+```
+Edge
+- id
+- fromNodeId
+- toNodeId
+- type: CHRONOLOGICAL | RELATIONSHIP
+```
+
+That’s it.
+
+
+Edges define movement.
+
+This model supports:
+
+* Single
+* Multi
+* Branch
+* Split
+* Merge
+* Cross-leaf connectors
+* Parallel duplicates
+
+Without hacks.
+
+---
+
+
+so update the schema based on this, then we will change the routes, and the frontend
+
+---
+
+# UI
+
+the UI would consist of a sidebar for timeline and branch navigation, and a main content area for leaf and node visualization.
+
+## Sidebar
+
+```
+Sidebar
+- Timeline
+  - Branch
+    - Leaf
+```
+the sidebar would be a tree view of the timeline, branches and leaves.
+timeline would be at the top, displayed as (timeline.name timeline.index: timeline.title), clicking it would open a menu with options to change title, add branch, reorder timeline, delete timeline.
+
+branch would be displayed as a header above its leaves, it would display all the branch levels until leaves (branch1.name derivedNumber(branch1.orderKey)) > (branch2.name derivedNumber(branch2.orderKey)) > (branch3.name derivedNumber(branch3.orderKey)), clicking it would open a menu with options to branch level selector(1-3, to choose which branch the action in the menu is for, this is only visible if more than 1 branch exists), change title, add branch(below/above), delete branch.
+
+leaf would be displayed as (leaf.name derivedNumber(leaf.orderKey): leaf.title), clicking it would open a menu with options to change title, add node, reorder leaf(move to another branch, or reorder within the same branch), delete leaf.
+
+## Main Content Area
+
+```
+Main Content Area
+- Leaf
+  - Node
+  - Edge
+```
+The main content area would be a graph view of the nodes and edges.
+it would start with a start node and an end node by default, with a single chronological edge connecting them. adding a leaf would increase the spacing between the start and end node, and display a text to represent the leaf above the graph, displayed as (derivedNumber(leaf.orderKey). leaf.title), if theres no title, it would display (leaf.name derivedNumber(leaf.orderKey)). adding an event node to a leaf would display it as a circle, with the line path connecting to the previous/next node in the edge model. the first event in the first leaf is always connected to the start node, and the last event in the last leaf is always connected to the end node, but they can be multiple end nodes, if more than one event node connects to the end node, clicking the end node would give the option to 'split (edge.fromNode.eventId.name) ending', this would create a new end node, and connect the edge to the new end node, there would also be the option to lock level(which would prevent the end node from being moved to another leaf, but at least one end node must be present in the last leaf so it cannot be locked), there would also be the option to delete end node(which would remove the end node and the edge connecting to it, but at least one end node must be present in the last leaf so it cannot be deleted). whenever an event node is added to a leaf, it would be connected to the last node in that leaf. if a new leaf is added, there would be a vertical line seperating the previous leaf and the new leaf, leafs are ordered from left to right based on their orderKey.
+
+there would be connector nodes, which would connect events across leafs, they would be part of the leaf divider, and would be automaticaly created as an intermidiary if a node in the previous leaf is connected to a node in the next leaf, and there is no connector node between them.
+
+when you add an event to a leaf, it would ask for connected from, with option for the event nodes in the current leaf, or the previous leaf, or the start node. if the event is connected to an event from the previous leaf, a connector node would be created between the two event nodes, and the edge would be connected to the connector node instead of the event node from the previous leaf.
+
+
+
+clicking on the event in the sidebar, would give the option to edit what it connected from(same leaf node, previous leaf node, start node), and what it connected to(same leaf node, next leaf node, end node), and also the option to delete the event node. a node can have multiple connections from and to.

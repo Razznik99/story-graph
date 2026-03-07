@@ -78,7 +78,7 @@ export async function POST(req: Request) {
                     name: { contains: query, mode: 'insensitive' }
                 },
                 take: 5,
-                select: { id: true, name: true, title: true, level: true } // title might be null, use name
+                select: { id: true, name: true }
             })
         ]);
 
@@ -86,7 +86,7 @@ export async function POST(req: Request) {
             ...cards.map(c => ({ id: c.id, type: 'card', name: c.name, subtitle: c.cardType.name })),
             ...events.map(e => ({ id: e.id, type: 'event', name: e.title, subtitle: e.eventType.name })),
             ...notes.map(n => ({ id: n.id, type: 'note', name: n.title, subtitle: n.timelineId ? 'Story' : 'Note' })),
-            ...timelines.map(t => ({ id: t.id, type: 'timeline', name: t.title || t.name, subtitle: `Level ${t.level}` })),
+            ...timelines.map(t => ({ id: t.id, type: 'timeline', name: t.name, subtitle: `Timeline` })),
         ];
 
         return NextResponse.json(results);

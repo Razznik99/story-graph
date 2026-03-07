@@ -37,8 +37,7 @@ export type EventIntensity = z.infer<typeof schemas.EventIntensitySchema>;
 export type EventVisibility = z.infer<typeof schemas.EventVisibilitySchema>;
 
 export type Timeline = z.infer<typeof schemas.TimelineSchema>;
-export type TimelineConfig = z.infer<typeof schemas.TimelineConfigSchema>;
-export type TimelinePath = z.infer<typeof schemas.TimelinePathSchema>;
+
 
 export type Note = z.infer<typeof schemas.NoteSchema>;
 export type CreateNote = z.infer<typeof schemas.CreateNoteSchema>;

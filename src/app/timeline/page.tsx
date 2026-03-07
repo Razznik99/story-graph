@@ -15,7 +15,7 @@ import {
 
 import { Button } from '@/components/ui/button';
 import { useStoryStore } from '@/store/useStoryStore';
-import { getTimelineConfig, listEvents, listTLNodes, TimelineConfig, Timeline, Event } from '@/lib/timeline-api';
+import { listEvents, getTimelineGraphs, TimelineGraph, Event } from '@/lib/timeline-api';
 
 import TimelineExplorer from '@/components/timeline/TimelineExplorer';
 import { TimelineDock, useTimelineDock } from '@/components/timeline/TimelineDock';
@@ -33,18 +33,10 @@ export default function TimelinePage() {
     useEffect(() => setMounted(true), []);
 
     // Page-level queries to feed the Canvas (Explorer fetches its own data via React Query cache)
-    const { data: config } = useQuery<TimelineConfig | null>({
-        queryKey: ['tl', 'config', storyId],
-        queryFn: async () => {
-            if (!storyId) return null;
-            return (await getTimelineConfig(storyId)) as unknown as TimelineConfig;
-        },
-        enabled: !!storyId,
-    });
 
-    const { data: tlNodes = [] } = useQuery<Timeline[]>({
-        queryKey: ['tl', 'nodes', storyId],
-        queryFn: () => (storyId ? listTLNodes(storyId) : Promise.resolve([])),
+    const { data: graphs = [] } = useQuery<TimelineGraph[]>({
+        queryKey: ['tl', 'graphs', storyId],
+        queryFn: () => (storyId ? getTimelineGraphs(storyId) : Promise.resolve([])),
         enabled: !!storyId
     });
 
@@ -166,7 +158,7 @@ export default function TimelinePage() {
                         <TimelineCanvas
                             storyId={storyId}
                             events={events}
-                            timelineNodes={tlNodes as Timeline[]}
+                            graphs={graphs}
                             onSelectEvent={(id: string) => dock.openEventById(id)}
                         />
                     )}
@@ -188,7 +180,7 @@ export default function TimelinePage() {
                         {swap ? <TimelineCanvas
                             storyId={storyId}
                             events={events}
-                            timelineNodes={tlNodes as Timeline[]}
+                            graphs={graphs}
                             onSelectEvent={(id: string) => dock.openEventById(id)}
                         /> : <TimelineDock />}
                     </div>

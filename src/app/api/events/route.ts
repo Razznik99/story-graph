@@ -56,12 +56,7 @@ export async function POST(req: NextRequest) {
             // Determine order: find max order for this story (and timeline if exists, but currently global list logic mainly)
             // If timelineId is present, maybe scope to timeline? For now, let's just use global order or specific logic if requested.
             // The prompt didn't specify strict ordering logic, so append to end is safe.
-            const lastEvent = await tx.event.findFirst({
-                where: { storyId },
-                orderBy: { order: 'desc' },
-                select: { order: true }
-            });
-            const newOrder = (lastEvent?.order ?? 0) + 1;
+            // Order and timeline placement logic is handled by timeline-nodes now.
 
             const event = await tx.event.create({
                 data: {
@@ -72,8 +67,6 @@ export async function POST(req: NextRequest) {
                     intensity: rest.intensity ?? 'MEDIUM',
                     visibility: rest.visibility ?? 'PUBLIC',
                     outcome: rest.outcome ?? null,
-                    timelineId: rest.timelineId ?? null,
-                    order: rest.order ?? newOrder,
                     tags: tags ?? [],
                 },
                 include: { eventType: true }
@@ -155,7 +148,7 @@ export async function GET(req: NextRequest) {
                 eventType: true,
                 // outgoingLinks: true // Include outgoing relations for TimelineCanvas
             },
-            orderBy: { order: 'asc' }
+            orderBy: { createdAt: 'asc' }
         });
 
         return NextResponse.json(events);

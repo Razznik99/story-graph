@@ -13,7 +13,6 @@ datasource db {
   provider = "postgresql"
 }
 
-
 // ======================
 // Enums
 // ======================
@@ -201,6 +200,18 @@ enum NoteRelationType {
   CONTRADICTS
 }
 
+enum NodeType {
+  START
+  END
+  EVENT
+  CONNECTOR
+}
+
+enum EdgeType {
+  CHRONOLOGICAL
+  RELATIONSHIP
+}
+
 // ======================
 // Models
 // ======================
@@ -212,74 +223,72 @@ model User {
   emailVerified DateTime?
   image         String?
   username      String?   @unique @db.VarChar(20)
-  
-  accounts      Account[]
-  sessions      Session[]
 
-  createdAt      DateTime        @default(now())
-  updatedAt      DateTime        @updatedAt
+  accounts Account[]
+  sessions Session[]
 
-  stories        Story[]
-  collaborations Collaboration[]
-  collaborationRequests   CollaborationRequest[]
-  comments       Comment[]
-  suggestions    Suggestion[]
-  collaborationInvites CollaborationInvite[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  stories               Story[]
+  collaborations        Collaboration[]
+  collaborationRequests CollaborationRequest[]
+  comments              Comment[]
+  suggestions           Suggestion[]
+  collaborationInvites  CollaborationInvite[]
 
   aiProvider AIProvider?
   apiKey     String? // Encrypted (conceptually, for now plain text per plan)
-  
-  aiChats    AIChat[]
+
+  aiChats AIChat[]
 
   // Billing & Limits
-  plan                  PlanType            @default(free)
-  paddleSubscriptionId  String?
-  paddleCustomerId      String?
-  subscriptionStatus    SubscriptionStatus  @default(active)
-  currentPeriodEnd      DateTime?
-  tokensRemaining       Int                 @default(0)
-  imgGenRemaining       Int                 @default(0)
-  lastTokenRefresh      DateTime?
+  plan                 PlanType           @default(free)
+  paddleSubscriptionId String?
+  paddleCustomerId     String?
+  subscriptionStatus   SubscriptionStatus @default(active)
+  currentPeriodEnd     DateTime?
+  tokensRemaining      Int                @default(0)
+  imgGenRemaining      Int                @default(0)
+  lastTokenRefresh     DateTime?
 }
 
 model Story {
-  id               String                @id @default(uuid())
-  title            String                @db.VarChar(100)
-  abbreviation     String                @db.VarChar(10)
-  language         String // ISO 639-1
-  medium           StoryMedium           @default(Story)
-  genres           StoryGenre[]
-  synopsis         String?               @db.VarChar(2000)
-  tags             String[] // e.g., ["#Action"]
-  status           StoryStatus           @default(Draft)
-  visibility       StoryVisibility       @default(private)
-  coverUrl         String? // HTTPS URL
-  ownerId          String
-  owner            User                  @relation(fields: [ownerId], references: [id], onDelete: Cascade)
-  collaborators    Collaboration[]
-  collaborationRequests   CollaborationRequest[]
-  collaborationInvites   CollaborationInvite[]
-  cardTypes        CardType[]
-  attributeDefs    AttributeDefinition[]
-  eventTypes       EventType[]
-  cards            Card[]
-  events           Event[]
-  timelineConfig   TimelineConfig?
-  timeline         Timeline[]
-  analysisReports  AnalysisReport[]
-  comments         Comment[]
-  suggestions      Suggestion[]
-  notes            Note[]
-  cardRoles        CardRole[]
-  createdAt        DateTime              @default(now())
-  updatedAt        DateTime              @updatedAt
-  EventCardLink    EventCardLink[]
-  EventEventLink   EventEventLink[]
-  TimelinePath     TimelinePath[]
-  NoteNoteLink     NoteNoteLink[]
-  Tag              Tag[]
-  identities       Identity[]
-  aiChats          AIChat[]
+  id                    String                 @id @default(uuid())
+  title                 String                 @db.VarChar(100)
+  abbreviation          String                 @db.VarChar(10)
+  language              String // ISO 639-1
+  medium                StoryMedium            @default(Story)
+  genres                StoryGenre[]
+  synopsis              String?                @db.VarChar(2000)
+  tags                  String[] // e.g., ["#Action"]
+  status                StoryStatus            @default(Draft)
+  visibility            StoryVisibility        @default(private)
+  coverUrl              String? // HTTPS URL
+  ownerId               String
+  owner                 User                   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  collaborators         Collaboration[]
+  collaborationRequests CollaborationRequest[]
+  collaborationInvites  CollaborationInvite[]
+  cardTypes             CardType[]
+  attributeDefs         AttributeDefinition[]
+  eventTypes            EventType[]
+  cards                 Card[]
+  events                Event[]
+  timeline              Timeline[]
+  analysisReports       AnalysisReport[]
+  comments              Comment[]
+  suggestions           Suggestion[]
+  notes                 Note[]
+  cardRoles             CardRole[]
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  EventCardLink         EventCardLink[]
+  EventEventLink        EventEventLink[]
+  NoteNoteLink          NoteNoteLink[]
+  Tag                   Tag[]
+  identities            Identity[]
+  aiChats               AIChat[]
 
   @@unique([ownerId, title])
   @@unique([ownerId, abbreviation])
@@ -308,8 +317,8 @@ model CollaborationRequest {
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   role    CollaborationRole
-  message String?           @db.VarChar(500)
-  status  CollaborationStatus     @default(PENDING)
+  message String?             @db.VarChar(500)
+  status  CollaborationStatus @default(PENDING)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -324,8 +333,8 @@ model CollaborationInvite {
   userId  String
   user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  role    CollaborationRole
-  status  CollaborationStatus     @default(PENDING)
+  role   CollaborationRole
+  status CollaborationStatus @default(PENDING)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -397,22 +406,22 @@ model AttributeDefinition {
 }
 
 model Identity {
-  id        String   @id @default(uuid())
-  storyId   String
-  story     Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
+  id         String   @id @default(uuid())
+  storyId    String
+  story      Story    @relation(fields: [storyId], references: [id], onDelete: Cascade)
   cardTypeId String
   cardType   CardType @relation(fields: [cardTypeId], references: [id], onDelete: Cascade)
-  cards     Card[]
-  createdAt DateTime @default(now())
+  cards      Card[]
+  createdAt  DateTime @default(now())
 }
 
 model Card {
-  id             String          @id @default(uuid())
-  storyId        String
-  story          Story           @relation(fields: [storyId], references: [id], onDelete: Cascade)
-  
-  identityId     String
-  identity       Identity        @relation(fields: [identityId], references: [id], onDelete: Cascade)
+  id      String @id @default(uuid())
+  storyId String
+  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+
+  identityId String
+  identity   Identity @relation(fields: [identityId], references: [id], onDelete: Cascade)
 
   name           String          @db.VarChar(100)
   cardTypeId     String
@@ -424,9 +433,9 @@ model Card {
   hidden         Boolean         @default(false)
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  eventCardLinks EventCardLink[] 
-  
-  orderKey       Decimal         @db.Decimal(20, 6)
+  eventCardLinks EventCardLink[]
+
+  orderKey Decimal @db.Decimal(20, 6)
 
   @@index([storyId])
   @@index([identityId, orderKey])
@@ -459,22 +468,18 @@ model Event {
   visibility EventVisibility @default(PUBLIC)
   outcome    String?         @db.VarChar(1000)
 
-  timelineId String?
-  timeline   Timeline? @relation(fields: [timelineId], references: [id], onDelete: SetNull)
-
-  order Int @default(0)
+  timelineNodes TimelineNode[]
 
   tags String[]
 
-  linkedCards          EventCardLink[]
-  outgoingLinks    EventEventLink[] @relation("Source")
-  incomingLinks    EventEventLink[] @relation("Target")
+  linkedCards   EventCardLink[]
+  outgoingLinks EventEventLink[] @relation("Source")
+  incomingLinks EventEventLink[] @relation("Target")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([storyId])
-  @@index([timelineId, order])
 }
 
 model CardRole {
@@ -538,74 +543,115 @@ model EventEventLink {
   @@index([linkId])
 }
 
-model TimelineConfig {
-  id      String @id @default(uuid())
-  storyId String @unique
-  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
-
-  timelineType String @default("single") // "single" or "multi"
-
-  // Level definitions
-  level1Name String @default("Story")
-
-  level2Name String? // Optional
-
-  level3Name    String? // Optional
-  level3Persist Boolean @default(false)
-
-  level4Name    String? // Optional
-  level4Persist Boolean @default(false)
-
-  level5Name    String  @default("Chapter") // Required
-  level5Persist Boolean @default(false)
-
-  confirmed Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
 model Timeline {
   id      String @id @default(uuid())
   storyId String
   story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
 
-  parentId String?
-  parent   Timeline?  @relation("TimelineTree", fields: [parentId], references: [id])
-  children Timeline[] @relation("TimelineTree")
+  name  String  @default("Timeline")
 
-  orderKey Decimal @db.Decimal(20, 6)
-  name     String  @default("")
-  title    String?
-  level    Int
+  // Naming scheme
+  branch1Name  String  @default("Branch")
+  branch2Name  String?
+  branch3Name  String?
+  leafName     String  @default("Leaf")
 
-  pathId String?
-  path   TimelinePath? @relation(fields: [pathId], references: [id])
+  // Persist logic
+  branch2Persist Boolean @default(false)
+  branch3Persist Boolean @default(false)
+  leafPersist    Boolean @default(false)
 
-  events    Event[]
-  notes     Note? // chapter-like
+  branches Branch[]
+  notes    Note? // optional note attachment
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  @@unique([storyId, name])
   @@index([storyId])
-  @@index([parentId])
-  @@index([level])
-  @@index([storyId, parentId, orderKey]) // Efficient ordering per level
 }
 
-model TimelinePath {
-  id      String @id @default(uuid())
-  storyId String
-  story   Story  @relation(fields: [storyId], references: [id], onDelete: Cascade)
+model Branch {
+  id         String   @id @default(uuid())
+  timelineId String
+  timeline   Timeline @relation(fields: [timelineId], references: [id], onDelete: Cascade)
 
-  name        String?
-  description String?
+  name  String  @default("")
+  title String?
 
-  timelines Timeline[]
+  parentBranchId String?
+  parentBranch   Branch?  @relation("BranchTree", fields: [parentBranchId], references: [id])
+  childBranches  Branch[] @relation("BranchTree")
+
+  level    Int     @default(1) // 1-3
+  orderKey Decimal @db.Decimal(20, 6)
+
+  leaves Leaf[]
+  notes  Note?
 
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  @@index([storyId])
+  @@index([timelineId])
+  @@index([parentBranchId])
+}
+
+model Leaf {
+  id       String @id @default(uuid())
+  branchId String
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  name     String  @default("")
+  title    String?
+  orderKey Decimal @db.Decimal(20, 6)
+
+  nodes TimelineNode[]
+  notes Note?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([branchId])
+}
+
+model TimelineNode {
+  id     String @id @default(uuid())
+  leafId String
+  leaf   Leaf   @relation(fields: [leafId], references: [id], onDelete: Cascade)
+
+  eventId String?
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  type NodeType @default(EVENT) // START | END | EVENT | CONNECTOR
+
+  isLocked Boolean @default(false) // Used for END nodes to stay in current leaf
+
+  outgoingEdges TimelineEdge[] @relation("EdgeFrom")
+  incomingEdges TimelineEdge[] @relation("EdgeTo")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leafId])
+  @@index([eventId])
+}
+
+model TimelineEdge {
+  id         String       @id @default(uuid())
+  fromNodeId String
+  fromNode   TimelineNode @relation("EdgeFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+
+  toNodeId String
+  toNode   TimelineNode @relation("EdgeTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  type EdgeType @default(CHRONOLOGICAL) // CHRONOLOGICAL | RELATIONSHIP
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fromNodeId, toNodeId, type])
+  @@index([fromNodeId])
+  @@index([toNodeId])
 }
 
 model AnalysisReport {
@@ -626,15 +672,15 @@ model AnalysisReport {
 }
 
 model AIChat {
-  id        String   @id @default(uuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  storyId   String?  // Optional: Link chat to a specific story context
-  story     Story?   @relation(fields: [storyId], references: [id], onDelete: SetNull)
+  id      String  @id @default(uuid())
+  userId  String
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  storyId String? // Optional: Link chat to a specific story context
+  story   Story?  @relation(fields: [storyId], references: [id], onDelete: SetNull)
 
-  title     String   @db.VarChar(200) @default("New Chat")
-  
-  messages  AIMessage[]
+  title String @default("New Chat") @db.VarChar(200)
+
+  messages AIMessage[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -644,16 +690,16 @@ model AIChat {
 }
 
 model AIMessage {
-  id        String   @id @default(uuid())
-  chatId    String
-  chat      AIChat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  id     String @id @default(uuid())
+  chatId String
+  chat   AIChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
 
-  role      String   @db.VarChar(50) // 'user', 'assistant', 'system'
-  content   String   @db.Text
-  
+  role    String @db.VarChar(50) // 'user', 'assistant', 'system'
+  content String @db.Text
+
   // Optional: Metadata for things like referenced entities in this message
-  metadata  Json?    // For tracking tool calls, references, etc.
-  proposals Json?    // Array of AI creation proposals waiting for user action
+  metadata  Json? // For tracking tool calls, references, etc.
+  proposals Json? // Array of AI creation proposals waiting for user action
 
   createdAt DateTime @default(now())
 
@@ -669,12 +715,18 @@ model Note {
   content Json // TipTap JSON
   tags    String[]
 
-  // Chapter binding (1 note per timeline node)
+  // Entity bindings (1 note per node)
   timelineId String?   @unique
   timeline   Timeline? @relation(fields: [timelineId], references: [id], onDelete: Cascade)
 
-  noteLinksFrom NoteNoteLink[]     @relation("NoteFrom")
-  noteLinksTo   NoteNoteLink[]     @relation("NoteTo")
+  branchId String? @unique
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  leafId String? @unique
+  leaf   Leaf?   @relation(fields: [leafId], references: [id], onDelete: Cascade)
+
+  noteLinksFrom NoteNoteLink[] @relation("NoteFrom")
+  noteLinksTo   NoteNoteLink[] @relation("NoteTo")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -724,18 +776,18 @@ model GlobalTag {
 // NextAuth Models
 
 model Account {
-  id                 String  @id @default(uuid())
-  userId             String
-  type               String
-  provider           String
-  providerAccountId  String
-  refresh_token      String?  @db.Text
-  access_token       String?  @db.Text
-  expires_at         Int?
-  token_type         String?
-  scope              String?
-  id_token           String?  @db.Text
-  session_state      String?
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

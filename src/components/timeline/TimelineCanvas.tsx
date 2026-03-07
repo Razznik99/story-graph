@@ -1,683 +1,650 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useEffect, useState } from 'react';
+import { calculateLeafNumbers } from './timeline-explorer-helpers';
+import {
+    ReactFlow,
+    Controls,
+    Background,
+    useNodesState,
+    useEdgesState,
+    addEdge,
+    Connection,
+    Edge,
+    Node,
+    MarkerType,
+    ReactFlowProvider,
+    Position,
+    Handle,
+    useReactFlow,
+    useStore,
+    Panel,
+    BaseEdge,
+    getSmoothStepPath,
+    EdgeProps,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { useTimelineStore } from '@/store/useTimelineStore';
-import { useQuery } from '@tanstack/react-query';
-import { motion } from 'framer-motion';
-import { useCamera } from '@/hooks/useCamera';
-import { TimelineConfig, Timeline, Event, getTimelineConfig } from '@/lib/timeline-api';
-import { calculateSingleLevelLayout, LayoutItem, LANES } from '@/lib/timeline-layout';
-import { getDerivedNumber } from './timeline-explorer-helpers';
-import { TimelineCanvasControls } from './TimelineCanvasControls';
-import { Option } from '@/components/ui/searchable-select';
+import { TimelineGraph, Event, TimelineNode, TimelineEdge, Branch, Leaf } from '@/lib/timeline-api';
+import { calculateBranchNumbers } from './timeline-explorer-helpers';
 import { INTENSITY_COLORS } from '@/domain/constants/index';
+import CanvasDock from "./CanvasDock";
+import { useQueryClient } from '@tanstack/react-query';
+import { getLaneLayoutedElements } from './timeline-layout';
+import {
+    createNode,
+    createEdge,
+    deleteNode,
+    deleteEdge,
+    updateNodeLocked,
+    duplicateEvent,
+    updateNodeLeaf
+} from '@/lib/timeline-api';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { Button } from '@/components/ui/button';
+import { ChevronUp, ChevronDown, Trash2, Settings, Lock, Unlock, Copy, ExternalLink, Network } from 'lucide-react';
+import { SearchableSelect, Option } from '@/components/ui/searchable-select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import CanvasWizard from './CanvasWizard';
+import { toast } from 'sonner';
 
 interface TimelineCanvasProps {
     storyId: string;
     events: Event[];
-    timelineNodes: Timeline[];
+    graphs: TimelineGraph[];
     onSelectEvent: (eventId: string) => void;
 }
 
-export default function TimelineCanvas({
-    storyId,
-    events,
-    timelineNodes,
-    onSelectEvent,
-}: TimelineCanvasProps) {
-    const { camera, ref, bind, controls } = useCamera({
-        minScale: 0.1,
-        maxScale: 3
-    });
+const nodeWidth = 80;
+const nodeHeight = 80;
 
-    const { currentLevelId, setCurrentLevelId } = useTimelineStore();
-    const [currentLevelName, setCurrentLevelName] = useState("Story Start");
-    const [isSearchOpen, setIsSearchOpen] = useState(false);
-    const [activeEventIds, setActiveEventIds] = useState<Set<string>>(new Set());
-    const [viewHeight, setViewHeight] = useState(0);
-    const [hoveredLink, setHoveredLink] = useState<{
-        x: number;
-        y: number;
-        title: string;
-        type: string;
-    } | null>(null);
-    const [pendingCenterEventId, setPendingCenterEventId] = useState<string | null>(null);
+// --- Custom Nodes & Edges ---
+export function FocusEdge({ id, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, style = {}, markerEnd, data }: EdgeProps) {
+    const [path] = getSmoothStepPath({ sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, borderRadius: 20 });
 
-    // Fetch event relations for the story
-    const { data: relationsData } = useQuery({
-        queryKey: ['event-relations', storyId],
-        queryFn: async () => {
-            const res = await fetch(`/api/events/relations?storyId=${storyId}&type=event`);
-            if (!res.ok) throw new Error('Failed to fetch relations');
-            return res.json();
-        },
-        enabled: !!storyId
-    });
+    // Typecast data to our known structure
+    const edgeData = data as { label: string, onHover: (e: any, show: boolean, text: string) => void };
 
-    const { data: config } = useQuery({
-        queryKey: ['tl', 'config', storyId],
-        queryFn: () => getTimelineConfig(storyId),
-        enabled: !!storyId,
-        staleTime: Infinity,
-    });
-
-    const linkMap = useMemo(() => {
-        const map = new Map<string, any[]>();
-        if (relationsData?.links) {
-            relationsData.links.forEach((link: any) => {
-                if (!map.has(link.eventId)) map.set(link.eventId, []);
-                map.get(link.eventId)?.push(link);
-            });
-        }
-        return map;
-    }, [relationsData]);
-
-
-    // Initialize currentLevelId & Safety Check
-    useEffect(() => {
-        if (timelineNodes.length > 0) {
-            // If currentLevelId is set but not found, or not set at all, default to root
-            const exists = currentLevelId && timelineNodes.find(n => n.id === currentLevelId);
-            if (!currentLevelId || !exists) {
-                const root = timelineNodes.find(n => !n.parentId);
-                if (root) setCurrentLevelId(root.id);
-            }
-        }
-    }, [timelineNodes, currentLevelId]);
-
-    // Update level name display
-    useEffect(() => {
-        if (currentLevelId && config) {
-            const node = timelineNodes.find(n => n.id === currentLevelId);
-            if (node) {
-                const num = getDerivedNumber(node, timelineNodes, config);
-                const base = node.title || node.name || "Level";
-
-                // Condition: Single Timeline Level 1 -> No Number
-                const isSingleRoot = config.timelineType === 'single' && node.level === 1;
-
-                setCurrentLevelName(isSingleRoot ? base : `${base} ${num}`);
-            }
-        } else {
-            setCurrentLevelName("Story");
-        }
-    }, [currentLevelId, timelineNodes, config]);
-
-    const layoutItems = useMemo(() => {
-        if (!config) return [];
-        return calculateSingleLevelLayout(currentLevelId, timelineNodes, events, config);
-    }, [currentLevelId, timelineNodes, events, config]);
-
-    // Handle Centering of Event after Navigation
-    useEffect(() => {
-        if (!pendingCenterEventId) return;
-
-        centerOnEvent(pendingCenterEventId);
-        setActiveEventIds(prev => {
-            const next = new Set(prev);
-            next.add(pendingCenterEventId);
-            return next;
-        });
-        onSelectEvent(pendingCenterEventId);
-        setPendingCenterEventId(null);
-    }, [pendingCenterEventId, layoutItems]);
-
-
-    const handleArcNavigate = (
-        e: React.PointerEvent,
-        targetEvent: Event
-    ) => {
-        e.stopPropagation();
-        setHoveredLink(null);
-        // Navigate level if needed
-        if (targetEvent.timelineId && targetEvent.timelineId !== currentLevelId) {
-            setCurrentLevelId(targetEvent.timelineId);
-            setActiveEventIds(new Set());
-            setPendingCenterEventId(targetEvent.id);
-        }
-
-        // Defer centering until layout updates
-        setPendingCenterEventId(targetEvent.id);
-    };
-
-    // Calculate Arcs
-    const arcs = useMemo(() => {
-        if (activeEventIds.size === 0) return [];
-
-        const itemMap = new Map<string, LayoutItem>();
-        layoutItems.forEach(item => itemMap.set(item.id, item));
-
-        const arcItems: React.ReactNode[] = [];
-
-        // Helper to find ancestor at specific level
-        const getAncestorAtLevel = (startNode: Timeline, targetLevel: number): Timeline | null => {
-            let curr: Timeline | undefined = startNode;
-            while (curr && curr.level > targetLevel) {
-                if (!curr.parentId) return null;
-                curr = timelineNodes.find(n => n.id === curr!.parentId);
-            }
-            return curr && curr.level === targetLevel ? curr : null;
-        };
-
-        const analyzeRelation = (
-            sourceNode: Timeline,
-            targetNode: Timeline
-        ): {
-            type: 'same' | 'child' | 'sibling' | 'parent' | 'ancestor-sibling';
-            diff?: number;
-            dir?: 'before' | 'after';
-        } => {
-            if (sourceNode.id === targetNode.id) return { type: 'same' };
-
-            // Case 1: Target is SubLevel (Deeper)
-            if (targetNode.level > sourceNode.level) {
-                // Check direct child (ancestor at level+1 has parent == source)
-                const childAncestor = getAncestorAtLevel(targetNode, sourceNode.level + 1);
-                if (childAncestor && childAncestor.parentId === sourceNode.id) {
-                    return { type: 'child' };
-                }
-
-                // If not direct child, check ancestor at same level (sibling/peer)
-                const peer = getAncestorAtLevel(targetNode, sourceNode.level);
-                if (peer && peer.id !== sourceNode.id) {
-                    const peerOrder = Number(peer.orderKey ?? 0);
-                    const sourceOrder = Number(sourceNode.orderKey ?? 0);
-                    const diff = peerOrder > sourceOrder ? 1 : -1;
-                    return { type: 'sibling', diff };
-                }
-                return { type: 'same' };
-            }
-
-            // Case 2: Target is Higher Level (Ancestor)
-            if (targetNode.level < sourceNode.level) {
-                const sourceAncestor = getAncestorAtLevel(sourceNode, targetNode.level);
-                if (sourceAncestor) {
-                    if (sourceAncestor.id === targetNode.id) {
-                        return { type: 'parent' };
-                    } else {
-                        // Ancestor Sibling
-                        const targetOrder = Number(targetNode.orderKey ?? 0);
-                        const ancestorOrder = Number(sourceAncestor.orderKey ?? 0);
-                        return {
-                            type: 'ancestor-sibling',
-                            dir: targetOrder > ancestorOrder ? 'after' : 'before'
-                        };
-                    }
-                }
-            }
-
-            // Case 3: Same Level Sibling
-            if (targetNode.level === sourceNode.level) {
-                const targetOrder = Number(targetNode.orderKey ?? 0);
-                const sourceOrder = Number(sourceNode.orderKey ?? 0);
-                return { type: 'sibling', diff: targetOrder > sourceOrder ? 1 : -1 };
-            }
-
-            return { type: 'same' };
-        };
-
-        const currentLevelNode = timelineNodes.find(n => n.id === currentLevelId);
-        if (!currentLevelNode) return [];
-
-        activeEventIds.forEach(eventId => {
-            const event = events.find(e => e.id === eventId);
-            const sourceItem = itemMap.get(eventId);
-            const links = linkMap.get(eventId);
-
-            if (!event || !sourceItem || !links) return;
-
-            links.forEach(link => {
-                const targetEvent = events.find(e => e.id === link.linkId);
-                if (!targetEvent) return;
-
-                const isHovered = hoveredLink?.title === link.link?.title && hoveredLink?.type === link.relationshipType;
-                const baseOpacity = isHovered ? 1 : 0.85;
-                const strokeColor = "var(--color-accent)";
-
-                const handlers = {
-                    onPointerDown: (e: React.PointerEvent) => e.stopPropagation(),
-                    onMouseEnter: (e: React.MouseEvent) => {
-                        if (link.link) {
-                            setHoveredLink({
-                                x: e.clientX,
-                                y: e.clientY,
-                                title: link.link.title,
-                                type: link.relationshipType
-                            });
-                        }
-                    },
-                    onMouseLeave: () => setHoveredLink(null),
-                    onClick: (e: React.MouseEvent) => {
-                        if (targetEvent) handleArcNavigate(e as any, targetEvent);
-                    }
-                };
-
-                let targetX = sourceItem.x;
-                let pathD = "";
-
-                if (targetEvent.timelineId === currentLevelId) {
-                    const targetItem = itemMap.get(targetEvent.id);
-                    if (targetItem) {
-                        targetX = targetItem.x;
-                        const midX = (sourceItem.x + targetX) / 2;
-                        const dist = Math.abs(targetX - sourceItem.x);
-                        const height = Math.max(50, dist / 2);
-                        pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
-                    }
-                } else {
-                    const targetNode = timelineNodes.find(n => n.id === targetEvent.timelineId);
-                    if (targetNode) {
-                        const rel = analyzeRelation(currentLevelNode, targetNode);
-
-                        if (rel.type === 'child') {
-                            const childNode = getAncestorAtLevel(targetNode, currentLevelNode.level + 1);
-                            if (childNode) {
-                                const targetSubItem = layoutItems.find(i => i.type === 'subLevel' && i.data?.id === childNode.id);
-                                if (targetSubItem) {
-                                    targetX = targetSubItem.x;
-                                    const midX = (sourceItem.x + targetX) / 2;
-                                    const dist = Math.abs(targetX - sourceItem.x);
-                                    const height = Math.max(50, dist / 2);
-                                    pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} -20`;
-                                }
-                            }
-                        }
-                        else if (rel.type === 'sibling') {
-                            const diff = rel.diff!;
-                            let navItem: LayoutItem | undefined;
-                            let offsetX = 0;
-                            if (diff > 0) {
-                                navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'next');
-                                if (diff > 1) offsetX = 150; // Distant
-                            } else {
-                                navItem = layoutItems.find(i => i.type === 'navigation' && i.navDirection === 'prev');
-                                if (diff < -1) offsetX = -150; // Distant
-                            }
-
-                            if (navItem) {
-                                targetX = navItem.x + offsetX;
-                                const midX = (sourceItem.x + targetX) / 2;
-                                const dist = Math.abs(targetX - sourceItem.x);
-                                const height = Math.max(60, dist / 3);
-                                pathD = `M ${sourceItem.x} 0 Q ${midX} ${-height} ${targetX} 0`;
-                            }
-                        }
-                        else if (rel.type === 'parent') {
-                            pathD = `M ${sourceItem.x} 0 L ${sourceItem.x} -300`;
-                        }
-                        else if (rel.type === 'ancestor-sibling') {
-                            const isRight = rel.dir === 'after';
-                            const endX = isRight ? sourceItem.x + 400 : sourceItem.x - 400;
-                            pathD = `M ${sourceItem.x} 0 Q ${sourceItem.x} -200 ${endX} -400`;
-                        }
-                    }
-                }
-
-                if (pathD) {
-                    arcItems.push(
-                        <path
-                            key={`${event.id}-${link.linkId}`}
-                            d={pathD}
-                            fill="none"
-                            stroke={strokeColor}
-                            strokeWidth={3}
-                            vectorEffect="non-scaling-stroke"
-                            opacity={baseOpacity}
-                            className="cursor-pointer transition-opacity"
-                            {...handlers}
-                        />
-                    );
-                }
-            });
-        });
-
-        return arcItems;
-    }, [activeEventIds, layoutItems, events, hoveredLink, linkMap, currentLevelId, timelineNodes, config]);
-
-
-    // Search Options
-    const searchOptions = useMemo<Option[]>(() => {
-        const opts: Option[] = [];
-        timelineNodes.forEach(node => {
-            opts.push({
-                label: node.title || node.name,
-                value: node.id,
-                typeLabel: 'Level',
-                type: 'divider',
-                x: 0
-            });
-        });
-        events.forEach(ev => {
-            opts.push({
-                label: ev.title,
-                value: ev.id,
-                typeLabel: 'Event',
-                type: 'event',
-                x: 0
-            });
-        });
-        return opts;
-    }, [timelineNodes, events]);
-
-    const resetCamera = () => {
-        controls.setCamera({
-            x: 0,
-            y: 0,
-            scale: 1
-        });
-    };
-
-    const centerOnEvent = (eventId: string) => {
-        const item = layoutItems.find(i => i.id === eventId);
-        if (!item) return;
-
-        controls.setCamera({
-            x: -item.x,
-            y: 0,
-            scale: 1,
-        });
-    };
-
-
-    const handleSearchSelect = (val: string | null) => {
-        if (!val) return;
-
-        const targetEvent = events.find(e => e.id === val);
-        const targetNode = timelineNodes.find(n => n.id === val);
-
-        if (targetNode) {
-            setCurrentLevelId(targetNode.id);
-            resetCamera();
-
-        } else if (targetEvent) {
-            if (targetEvent.timelineId) {
-                // Use combined logic via shared handler or duplication:
-                if (targetEvent.timelineId !== currentLevelId) {
-                    setCurrentLevelId(targetEvent.timelineId);
-                    setActiveEventIds(new Set());
-                }
-                setPendingCenterEventId(targetEvent.id);
-            }
-        }
-
-        setIsSearchOpen(false);
-    };
-    const prevNav = useMemo(
-        () =>
-            layoutItems.find(
-                i => i.type === 'navigation' && i.navDirection === 'prev' && !i.isPlaceholder
-            ),
-        [layoutItems]
-    );
-
-    const nextNav = useMemo(
-        () =>
-            layoutItems.find(
-                i => i.type === 'navigation' && i.navDirection === 'next' && !i.isPlaceholder
-            ),
-        [layoutItems]
-    );
-
-
-    // Navigation Handlers
-    const handleNavigate = (id: string | null) => {
-        if (!id) return;
-        if (id === currentLevelId) return;
-
-        setCurrentLevelId(id);
-        setActiveEventIds(new Set());
-        resetCamera();
-    };
-
-
-    const handleNavigateUp = () => {
-        const curr = timelineNodes.find(n => n.id === currentLevelId);
-        if (curr && curr.parentId) setCurrentLevelId(curr.parentId);
-    };
-
-    const handleEventClick = (id: string) => {
-        setActiveEventIds(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) {
-                next.delete(id);
-            } else {
-                next.add(id);
-                onSelectEvent(id);
-            }
-            return next;
-        });
-    };
-
-
-    const getIntensityClass = (intensity?: string) => {
-        const key = intensity || 'LOW';
-        const classes = INTENSITY_COLORS[key] || INTENSITY_COLORS['LOW'];
-        if (!classes) return 'text-gray-500';
-        const match = classes.match(/text-[\w-]+/);
-        return match ? match[0] : 'text-gray-500';
-    };
-
+    // Avoid passing undefined markerEnd
+    const baseEdgeProps: any = { path, style, className: "peer transition-colors duration-200" };
+    if (markerEnd) baseEdgeProps.markerEnd = markerEnd;
 
     return (
-        <div className="w-full h-full relative bg-background overflow-hidden select-none">
-            <TimelineCanvasControls
-                isSearchOpen={isSearchOpen}
-                setIsSearchOpen={setIsSearchOpen}
-                currentLevelId={currentLevelId}
-                currentLevelName={currentLevelName}
-                timelineNodes={timelineNodes}
-                layoutItems={layoutItems}
-                searchOptions={searchOptions}
-                onSearchSelect={handleSearchSelect}
-                onResetCamera={resetCamera}
-                onZoomIn={controls.zoomIn}
-                onZoomOut={controls.zoomOut}
-                onNavigate={handleNavigate}
-                canNavigatePrev={!!prevNav}
-                canNavigateNext={!!nextNav}
-                onNavigatePrev={() => handleNavigate(prevNav?.data?.id ?? null)}
-                onNavigateNext={() => handleNavigate(nextNav?.data?.id ?? null)}
-                onNavigateUp={handleNavigateUp}
+        <>
+            <BaseEdge {...baseEdgeProps} />
+            <path d={path} fill="none" strokeOpacity={0} strokeWidth={24} className="hover:cursor-pointer"
+                onMouseEnter={(e) => edgeData?.onHover(e, true, edgeData.label)}
+                onMouseMove={(e) => edgeData?.onHover(e, true, edgeData.label)}
+                onMouseLeave={(e) => edgeData?.onHover(e, false, '')}
             />
-            {/* Tooltip */}
-            {hoveredLink && (
-                <div
-                    className="fixed z-50 pointer-events-none px-3 py-1.5 bg-popover text-popover-foreground text-sm rounded-md border shadow-md flex flex-col gap-0.5 text-center"
-                    style={{
-                        left: hoveredLink.x,
-                        top: hoveredLink.y - 12,
-                        transform: 'translate(-50%, -100%)',
-                    }}
-                >
+        </>
+    );
+}
 
-                    <span className="font-semibold">{hoveredLink.title}</span>
-                    <span className="text-xs text-muted-foreground opacity-90 uppercase tracking-wider">{hoveredLink.type}</span>
+const LeafGroupNode = ({ data }: any) => {
+    return (
+        <div className="w-full h-full border-x-[3px] border-border bg-transparent flex flex-col relative pt-8 cursor-grab active:cursor-grabbing">
+        </div>
+    );
+};
+
+const EventNodeComponent = ({ data }: any) => {
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <div className="relative flex flex-col items-center justify-center w-14 h-14 group cursor-pointer">
+                    <div className={`w-12 h-12 rounded-full bg-text-primary flex items-center justify-center shadow-lg transition-transform hover:scale-105 border-4 border-transparent hover:border-accent hover:bg-primary z-10 relative`}>
+                        <Handle type="target" position={Position.Left} className="w-1 h-1 opacity-0" />
+                        <Handle type="source" position={Position.Right} className="w-1 h-1 opacity-0" />
+                        <Handle type="source" position={Position.Top} id="rel-top" className="w-1 h-1 opacity-0" />
+                        <Handle type="source" position={Position.Bottom} id="rel-bottom" className="w-1 h-1 opacity-0" />
+                    </div>
+                    <div className="absolute top-14 opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap text-sm font-semibold text-text-tertiary px-2 py-1 z-20 pointer-events-none">
+                        {data.label}
+                    </div>
                 </div>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="center" className="bg-surface border-border border-accent z-[200]">
+                <DropdownMenuItem onClick={() => data.onClick()}>
+                    <ExternalLink className="w-4 h-4 mr-2 text-text-muted" /> View in Dock
+                </DropdownMenuItem>
+                <DropdownMenuItem disabled>
+                    <Network className="w-4 h-4 mr-2 text-text-muted" /> View Relations
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => data.onOpenWizard(data.eventId)}>
+                    <Settings className="w-4 h-4 mr-2 text-text-muted" /> Manage Connection
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => data.onDuplicateEvent(data.eventId)}>
+                    <Copy className="w-4 h-4 mr-2 text-text-muted" /> Duplicate
+                </DropdownMenuItem>
+                <DropdownMenuItem className="text-error" onClick={() => data.onRemove(data.nodeId)}>
+                    <Trash2 className="w-4 h-4 mr-2 text-error" /> Remove
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+};
+
+const StartEndNodeComponent = ({ data }: any) => {
+    const isEnd = data.type === 'END';
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <div className={`relative flex flex-col items-center justify-center w-14 h-14 group ${isEnd ? 'cursor-pointer' : ''}`}>
+                    <div className={`w-14 h-14 rounded-full bg-text-secondary flex items-center justify-center shadow-md z-10 relative`}>
+                        {data.type !== 'START' && <Handle type="target" position={Position.Left} className="w-1 h-1" />}
+                        {data.type !== 'END' && <Handle type="source" position={Position.Right} className="w-1 h-1" />}
+                        {data.isLocked && <Lock className="w-4 h-4 text-white absolute bottom-1 right-1 bg-background/50 rounded-full" />}
+                    </div>
+                    <div className="absolute top-16 whitespace-nowrap text-xs font-semibold text-text-tertiary pointer-events-none">
+                        {data.label}
+                    </div>
+                </div>
+            </DropdownMenuTrigger>
+            {isEnd && (
+                <DropdownMenuContent align="center" className="bg-surface border-border border-accent z-[200]">
+                    <DropdownMenuItem onClick={() => data.onLockToggle()}>
+                        {data.isLocked ? <Unlock className="w-4 h-4 mr-2" /> : <Lock className="w-4 h-4 mr-2" />}
+                        {data.isLocked ? 'Unlock' : 'Lock'}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => data.onMoveTo()}>
+                        <Settings className="w-4 h-4 mr-2" /> Move To...
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => data.onDuplicateEnd()}>
+                        <Copy className="w-4 h-4 mr-2" /> Duplicate
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            )}
+        </DropdownMenu>
+    );
+};
+
+const nodeTypes = {
+    eventNode: EventNodeComponent,
+    startEndNode: StartEndNodeComponent,
+    leafGroupNode: LeafGroupNode,
+};
+
+const edgeTypes = {
+    focusEdge: FocusEdge
+};
+
+function FlowCanvas({ storyId, events, graphs, onSelectEvent }: TimelineCanvasProps) {
+    const qc = useQueryClient();
+    const reactFlow = useReactFlow();
+    const { currentLevelId, focusEventId, setFocusEventId } = useTimelineStore();
+    const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+    const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+
+    const [hoverTooltip, setHoverTooltip] = useState<{ visible: boolean, x: number, y: number, text: string }>({ visible: false, x: 0, y: 0, text: '' });
+
+    // Determine the active scope based on currentLevelId.
+    // If it's a branch, we show leafs in that branch.
+    // If it's a leaf, we show that leaf.
+    const [activeScope, setActiveScope] = useState<{ type: 'timeline' | 'branch' | 'leaf', item: any, rootGraph?: TimelineGraph } | null>(null);
+
+    const [unconnectedNodes, setUnconnectedNodes] = useState<any[]>([]);
+    const [wizardEventId, setWizardEventId] = useState<string | null>(null);
+    const [moveNodeId, setMoveNodeId] = useState<string | null>(null);
+
+    useEffect(() => {
+        let found = false;
+        let rootGraph: TimelineGraph | null = null;
+
+        if (!currentLevelId) {
+            // Default to first graph
+            if (graphs.length > 0) {
+                const first = graphs[0] as TimelineGraph;
+                setActiveScope({ type: 'timeline', item: first, rootGraph: first });
+            }
+            return;
+        }
+
+        for (const g of graphs) {
+            if (g.id === currentLevelId) {
+                setActiveScope({ type: 'timeline', item: g, rootGraph: g });
+                found = true;
+                break;
+            }
+            const findInBranch = (branches: any[]) => {
+                for (const b of branches) {
+                    if (b.id === currentLevelId) {
+                        setActiveScope({ type: 'branch', item: b, rootGraph: g });
+                        found = true;
+                        return;
+                    }
+                    if (b.leaves) {
+                        for (const l of b.leaves) {
+                            if (l.id === currentLevelId) {
+                                setActiveScope({ type: 'leaf', item: l, rootGraph: g });
+                                found = true;
+                                return;
+                            }
+                        }
+                    }
+                    if ((b as any).childBranches) {
+                        findInBranch((b as any).childBranches);
+                    }
+                }
+            };
+            findInBranch(g.branches || []);
+            if (found) break;
+        }
+
+        if (!found && graphs.length > 0) {
+            const first = graphs[0] as TimelineGraph;
+            setActiveScope({ type: 'timeline', item: first, rootGraph: first });
+        }
+    }, [currentLevelId, graphs]);
+
+
+    useEffect(() => {
+        if (!activeScope) return;
+
+        const rawNodes: Node[] = [];
+        const rawEdges: Edge[] = [];
+
+        type RichNode = TimelineGraph['branches'][0]['leaves'][0]['nodes'][0];
+        let allNodes: RichNode[] = [];
+
+        if (activeScope.type === 'leaf') {
+            allNodes = (activeScope.item.nodes || []) as RichNode[];
+        } else if (activeScope.type === 'branch') {
+            (activeScope.item.leaves || []).forEach((l: Leaf) => {
+                if ((l as any).nodes) allNodes.push(...(l as any).nodes);
+            });
+        } else if (activeScope.type === 'timeline') {
+            const gatherNodes = (b: any) => {
+                if (b.leaves) {
+                    b.leaves.forEach((l: any) => {
+                        if (l.nodes) allNodes.push(...l.nodes);
+                    });
+                }
+                if (b.childBranches) {
+                    b.childBranches.forEach((cb: any) => gatherNodes(cb));
+                }
+            };
+            (activeScope.item.branches || []).forEach(gatherNodes);
+        }
+
+        // First generate leaf groups if we are in a broader scope
+        const leafGroups: Record<string, Node> = {};
+        let leafNums = new Map<string, number>();
+        if (activeScope.rootGraph) {
+            leafNums = calculateLeafNumbers(activeScope.rootGraph, activeScope.rootGraph);
+        }
+
+        if (activeScope.type === 'branch') {
+            (activeScope.item.leaves || []).forEach((l: Leaf) => {
+                leafGroups[l.id] = {
+                    id: l.id,
+                    type: 'leafGroupNode',
+                    position: { x: 0, y: 0 },
+                    data: { label: l.title || l.name || 'Leaf', orderKey: leafNums.get(l.id) },
+                    style: { width: 300, height: 500 } // Will be resized by layout
+                };
+            });
+        } else if (activeScope.type === 'timeline') {
+            const gatherLeaves = (b: any) => {
+                if (b.leaves) {
+                    b.leaves.forEach((l: any) => {
+                        leafGroups[l.id] = {
+                            id: l.id,
+                            type: 'leafGroupNode',
+                            position: { x: 0, y: 0 },
+                            data: { label: l.title || l.name || 'Leaf', orderKey: leafNums.get(l.id) },
+                            style: { width: 300, height: 500 }
+                        };
+                    });
+                }
+                if (b.childBranches) {
+                    b.childBranches.forEach((cb: any) => gatherLeaves(cb));
+                }
+            };
+            (activeScope.item.branches || []).forEach(gatherLeaves);
+        }
+
+        // Add all leaf groups to raw nodes
+        Object.values(leafGroups).forEach(lg => rawNodes.push(lg));
+
+        const ucNodes: any[] = [];
+
+        allNodes.forEach((rn: any) => {
+            const ev = rn.event;
+            const isEvent = rn.type === 'EVENT' && ev;
+
+            // Check if node has no edges
+            const noEdges = (!rn.outgoingEdges || rn.outgoingEdges.length === 0) && (!rn.incomingEdges || rn.incomingEdges.length === 0);
+
+            if (isEvent && noEdges) {
+                ucNodes.push(rn);
+                return; // Put in docking list, skip canvas
+            }
+
+            // Assign parent if we are in a broader scope than leaf
+            const parentId = activeScope.type !== 'leaf' ? rn.leafId : undefined;
+
+            const newNode: Node = {
+                id: rn.id,
+                type: isEvent ? 'eventNode' : 'startEndNode',
+                position: { x: 0, y: 0 },
+                data: {
+                    label: isEvent ? ev.title : (rn.type === 'START' ? 'Start' : 'End'),
+                    intensity: ev?.intensity || 'LOW',
+                    type: rn.type,
+                    nodeId: rn.id,
+                    eventId: ev?.id,
+                    isLocked: rn.isLocked,
+                    leafId: rn.leafId,
+                    onClick: () => {
+                        if (ev) onSelectEvent(ev.id);
+                    },
+                    onOpenWizard: (eId: string) => setWizardEventId(eId),
+                    onDuplicateEvent: async (eId: string) => {
+                        try {
+                            const duplicate = await duplicateEvent(eId, storyId);
+                            // Create the duplicate node in the same leaf
+                            const dNode = await createNode(rn.leafId, 'EVENT', duplicate.id);
+                            // Link original node -> duplicate node
+                            await createEdge(rn.id, dNode.id, 'CHRONOLOGICAL');
+                            qc.invalidateQueries({ queryKey: ['tl'] });
+                            toast.success('Event duplicated on canvas');
+                        } catch (e: any) {
+                            toast.error(e.message || 'Error duplicating event');
+                        }
+                    },
+                    onRemove: async (nId: string) => {
+                        if (confirm('Delete this event node from the timeline?')) {
+                            try {
+                                await deleteNode(nId);
+                                qc.invalidateQueries({ queryKey: ['tl'] });
+                                toast.success('Node removed');
+                            } catch (e: any) {
+                                toast.error(e.message);
+                            }
+                        }
+                    },
+                    onLockToggle: async () => {
+                        if (!rn.isLocked && rn.type === 'END') {
+                            const unlockedEndNodes = allNodes.filter(n => n.type === 'END' && !n.isLocked);
+                            if (unlockedEndNodes.length <= 1) {
+                                toast.error("You must have at least one unlocked End Node.");
+                                return;
+                            }
+                        }
+                        try {
+                            await updateNodeLocked(rn.id, !rn.isLocked);
+                            qc.invalidateQueries({ queryKey: ['tl'] });
+                        } catch (e: any) {
+                            toast.error(e.message);
+                        }
+                    },
+                    onMoveTo: () => {
+                        setMoveNodeId(rn.id);
+                    },
+                    onDuplicateEnd: async () => {
+                        try {
+                            await createNode(rn.leafId, 'END');
+                            qc.invalidateQueries({ queryKey: ['tl'] });
+                        } catch (e: any) {
+                            toast.error(e.message);
+                        }
+                    }
+                }
+            };
+
+            if (parentId) {
+                newNode.parentId = parentId;
+            }
+
+            rawNodes.push(newNode);
+
+            if (rn.outgoingEdges) {
+                rn.outgoingEdges.forEach((re: any) => {
+                    const toNode = allNodes.find(n => n.id === re.toNodeId) as any;
+                    let fromLabel = isEvent ? ev.title : (rn.type === 'START' ? 'Start' : 'End');
+                    let toLabel = 'Node';
+                    if (toNode) {
+                        toLabel = toNode.type === 'EVENT' && toNode.event ? toNode.event.title : (toNode.type === 'START' ? 'Start' : 'End');
+                    }
+                    rawEdges.push({
+                        id: re.id,
+                        source: re.fromNodeId,
+                        target: re.toNodeId,
+                        animated: false,
+                        type: re.type === 'CHRONOLOGICAL' ? 'focusEdge' : 'default',
+                        style: {
+                            stroke: re.type === 'CHRONOLOGICAL' ? 'var(--color-text-primary)' : 'var(--color-accent)',
+                            strokeWidth: re.type === 'CHRONOLOGICAL' ? 6 : 2,
+                            zIndex: 0,
+                        },
+                        data: {
+                            dbId: re.id,
+                            label: `${fromLabel} > ${toLabel}`,
+                            onHover: (e: any, show: boolean, text: string) => {
+                                setHoverTooltip({ visible: show, x: e.clientX, y: e.clientY, text });
+                                setEdges(eds => eds.map(ed => ({
+                                    ...ed,
+                                    zIndex: ed.id === re.id && show ? 100 : 0,
+                                    style: {
+                                        ...ed.style,
+                                        stroke: ed.id === re.id && show ? 'var(--color-accent)' : (ed.data?.isChrono ? 'var(--color-text-primary)' : 'var(--color-accent)')
+                                    }
+                                })));
+                            },
+                            isChrono: re.type === 'CHRONOLOGICAL'
+                        }
+                    });
+                });
+            }
+        });
+
+        setUnconnectedNodes(ucNodes);
+
+        // Ensure default start and end if completely empty
+        if (allNodes.length === 0) {
+            let startLeafId = activeScope.type === 'leaf' ? activeScope.item.id : null;
+            let endLeafId = startLeafId;
+
+            if (activeScope.type === 'timeline' || activeScope.type === 'branch') {
+                const scopeLeaves: Leaf[] = [];
+
+                // Helper to safely recursively gather leaves from any branch
+                const gatherLeaves = (branches: any[]) => {
+                    branches.forEach(b => {
+                        if (b.leaves && Array.isArray(b.leaves)) {
+                            scopeLeaves.push(...b.leaves);
+                        }
+                        if (b.childBranches && Array.isArray(b.childBranches)) {
+                            gatherLeaves(b.childBranches);
+                        }
+                    });
+                };
+
+                if (activeScope.type === 'branch') {
+                    if (activeScope.item.leaves) scopeLeaves.push(...activeScope.item.leaves);
+                    if (activeScope.item.childBranches) gatherLeaves(activeScope.item.childBranches);
+                } else if (activeScope.type === 'timeline') {
+                    if (activeScope.item.branches) gatherLeaves(activeScope.item.branches);
+                }
+
+                if (scopeLeaves.length > 0) {
+                    const firstLeaf = scopeLeaves[0];
+                    const lastLeaf = scopeLeaves[scopeLeaves.length - 1];
+                    if (firstLeaf && lastLeaf) {
+                        startLeafId = firstLeaf.id;
+                        endLeafId = lastLeaf.id;
+                    }
+                }
+            }
+
+            if (startLeafId && endLeafId) {
+                // Create Start and End node automatically through API
+                (async () => {
+                    const startNode = await createNode(startLeafId, 'START');
+                    const endNode = await createNode(endLeafId, 'END');
+                    await createEdge(startNode.id, endNode.id, 'CHRONOLOGICAL');
+                    qc.invalidateQueries({ queryKey: ['tl'] });
+                })();
+                return;
+            }
+        }
+
+        if (rawNodes.length > 0) {
+            const { nodes: layoutedNodes, edges: layoutedEdges } = getLaneLayoutedElements(
+                rawNodes,
+                rawEdges
+            );
+
+            // Check for automatically migrating unlocked END nodes here
+            const lastLeaf = Object.values(leafGroups).pop();
+            if (lastLeaf) {
+                const unlockedEndNodes = rawNodes.filter(n => n.type === 'startEndNode' && n.data.type === 'END' && !n.data.isLocked && n.parentId !== lastLeaf.id);
+                if (unlockedEndNodes.length > 0) {
+                    (async () => {
+                        // To avoid infinite loops, just update visually instantly and kick off async update
+                        for (const uen of unlockedEndNodes) {
+                            if (uen.data && (uen.data as any).nodeId) {
+                                await updateNodeLeaf((uen.data as any).nodeId as string, lastLeaf.id);
+                            }
+                        }
+                        qc.invalidateQueries({ queryKey: ['tl'] });
+                    })();
+                }
+            }
+
+            setNodes([...layoutedNodes]);
+            setEdges([...layoutedEdges]);
+        } else {
+            setNodes([]);
+            setEdges([]);
+        }
+
+    }, [activeScope, qc, onSelectEvent]);
+
+    const onConnect = useCallback(
+        async (params: Connection) => {
+            if (params.source && params.target) {
+                const edge = await createEdge(params.source, params.target, 'CHRONOLOGICAL');
+                qc.invalidateQueries({ queryKey: ['tl', 'graphs'] });
+            }
+        },
+        [qc],
+    );
+
+    // Focus Effect
+    useEffect(() => {
+        if (!focusEventId || nodes.length === 0) return;
+        const targetNode = nodes.find(n => n.data?.eventId === focusEventId);
+        if (targetNode) {
+            reactFlow.setCenter(targetNode.position.x + nodeWidth / 2, targetNode.position.y + nodeHeight / 2, { duration: 800, zoom: 1 });
+            // Flash node effect via DOM
+            const el = document.querySelector(`[data-id="${targetNode.id}"] .bg-text-primary`);
+            if (el) {
+                el.classList.add('ring-4', 'ring-accent', 'scale-110');
+                setTimeout(() => el.classList.remove('ring-4', 'ring-accent', 'scale-110'), 2000);
+            }
+            // Clear focus event so it can re-trigger
+            setTimeout(() => setFocusEventId(null), 100);
+        }
+    }, [focusEventId, nodes, reactFlow, setFocusEventId]);
+
+    const branchNums = useMemo(() => activeScope?.rootGraph ? calculateBranchNumbers(activeScope.rootGraph, activeScope.rootGraph) : new Map(), [activeScope?.rootGraph]);
+    const leafNums = useMemo(() => activeScope?.rootGraph ? calculateLeafNumbers(activeScope.rootGraph, activeScope.rootGraph) : new Map(), [activeScope?.rootGraph]);
+
+    return (
+        <div className="w-full h-full">
+            <ReactFlow
+                nodes={nodes}
+                edges={edges}
+                onNodesChange={onNodesChange}
+                onEdgesChange={onEdgesChange}
+                onConnect={onConnect}
+                nodeTypes={nodeTypes}
+                edgeTypes={edgeTypes}
+                nodesDraggable={false}
+                nodesConnectable={false}
+                elementsSelectable={true}
+                fitView
+                minZoom={0.05}
+                className="bg-background relative"
+            >
+                <CanvasDock
+                    unconnectedNodes={unconnectedNodes}
+                    onOpenWizard={setWizardEventId}
+                    onRemoveNode={async (nodeId) => {
+                        if (confirm('Delete this unused node?')) {
+                            try {
+                                await deleteNode(nodeId);
+                                qc.invalidateQueries({ queryKey: ['tl'] });
+                                toast.success('Node removed');
+                            } catch (e: any) {
+                                toast.error(e.message);
+                            }
+                        }
+                    }}
+                />
+                <Background color="var(--color-text-primary)" variant={"dots" as any} />
+                <Controls showInteractive={false} className="[&>button]:!bg-surface [&>button:hover]:!bg-surface-hover [&>button]:!border-border [&>button]:!text-text-primary [&_svg]:!fill-current border !border-border rounded-md shadow-sm" />
+                {hoverTooltip.visible && (
+                    <div className="fixed z-[100] px-2 py-1 text-xs font-medium text-white bg-black/80 rounded shadow pointer-events-none transform -translate-x-1/2 mt-4" style={{ left: hoverTooltip.x, top: hoverTooltip.y }}>
+                        {hoverTooltip.text}
+                    </div>
+                )}
+            </ReactFlow>
+            {wizardEventId && activeScope?.rootGraph && (
+                <CanvasWizard
+                    eventId={wizardEventId}
+                    activeGraph={activeScope.rootGraph}
+                    onClose={() => setWizardEventId(null)}
+                />
             )}
 
-            <div
-                ref={ref}
-
-                className="absolute inset-0 overflow-hidden bg-background cursor-grab active:cursor-grabbing"
-                style={{
-                    touchAction: "none",
-                    overscrollBehavior: "contain"
-                }}
-                {...bind}
-            >
-                <svg
-                    className="w-full h-full block"
-                    viewBox="-500 -250 1000 500"
-                    preserveAspectRatio="xMidYMid meet"
-                >
-                    <motion.g
-                        pointerEvents="all"
-                        animate={{ x: camera.x, y: camera.y, scale: camera.scale }}
-                        transition={{ duration: 0 }}
-                    >
-
-                        {/* Arcs */}
-                        {arcs}
-
-                        {/* Mainline */}
-                        <line
-                            x1={-5000} y1={0}
-                            x2={5000} y2={0}
-                            vectorEffect="non-scaling-stroke"
-                            strokeWidth={10}
-                            stroke='var(--color-primary)'
-                            className="stroke-primary"
+            <Dialog open={!!moveNodeId} onOpenChange={(open) => !open && setMoveNodeId(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Move End Node</DialogTitle>
+                        <DialogDescription>
+                            Select a leaf to move this End Node to. Note: If the node is unlocked, it will automatically jump to the end of the timeline later.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="w-full flex flex-col py-4">
+                        <SearchableSelect
+                            options={
+                                activeScope?.rootGraph?.branches.flatMap(b =>
+                                    b.leaves.map(l => ({
+                                        value: l.id,
+                                        label: `${b.name} ${branchNums.get(b.id) || ''} - ${l.name} ${leafNums.get(l.id) || ''}`
+                                    }))
+                                ) || []
+                            }
+                            value={''}
+                            placeholder="Select a destination leaf..."
+                            onChange={async (val) => {
+                                if (val && moveNodeId) {
+                                    try {
+                                        await updateNodeLeaf(moveNodeId, val);
+                                        toast.success('Node moved successfully');
+                                        qc.invalidateQueries({ queryKey: ['tl'] });
+                                    } catch (e: any) {
+                                        toast.error(e.message || 'Failed to move node');
+                                    } finally {
+                                        setMoveNodeId(null);
+                                    }
+                                }
+                            }}
                         />
-
-
-                        {/* Items */}
-                        {layoutItems.map(item => {
-                            // EVENT
-                            if (item.type === 'event') {
-                                const intensityClass = getIntensityClass(item.data?.intensity);
-                                const isActive = activeEventIds.has(item.id);
-                                return (
-                                    <g key={item.id} transform={`translate(${item.x}, 0)`}>
-
-                                        <circle
-                                            r={18}
-                                            strokeWidth={2}
-                                            stroke="var(--color-text-primary)"
-                                            className={`
-                                                    cursor-pointer
-                                                    transition-colors
-                                                    ${isActive
-                                                    ? 'fill-[var(--color-accent)]'
-                                                    : 'fill-[var(--color-surface)] hover:fill-[var(--color-accent-hover)]'}
-                                                  `}
-                                            data-no-camera
-                                            onPointerDown={e => e.stopPropagation()}
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleEventClick(item.id);
-                                            }}
-                                        />
-
-
-                                        {/* Label */}
-                                        <g transform={`translate(0, ${LANES.LABEL})`}>
-                                            <text
-                                                y={0}
-                                                fontSize={14}
-                                                textAnchor="middle"
-                                                className="fill-secondary select-none font-medium pointer-events-none"
-                                            >
-                                                {item.label}
-                                            </text>
-                                            {/* Intensity Line */}
-                                            <line
-                                                x1={-15} y1={15}
-                                                x2={15} y2={15}
-                                                strokeWidth={3}
-                                                stroke="currentColor"
-                                                className={intensityClass}
-                                            />
-                                        </g>
-                                    </g>
-                                );
-                            }
-
-                            // SUBLEVEL
-                            if (item.type === 'subLevel') {
-                                return (
-                                    <g key={item.id} transform={`translate(${item.x}, ${LANES.LEVEL})`}
-                                        data-no-camera
-                                        onPointerDown={e => e.stopPropagation()}
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleNavigate(item.id);
-                                        }}
-                                        className="cursor-pointer group"
-                                    >
-                                        {/* Hitbox */}
-                                        <rect
-                                            x={-60} y={-30}
-                                            width={120} height={60}
-                                            fill="transparent"
-                                            pointerEvents="all"
-
-                                        />
-                                        <text
-                                            y={5}
-                                            fontSize={34}
-                                            textAnchor="middle"
-                                            className="font-bold fill-[var(--color-text-primary)] group-hover:stroke-[var(--color-accent)] select-none pointer-events-none transition-colors"
-                                        >
-                                            {item.label}
-                                        </text>
-
-                                        <g transform={`translate(0, ${LANES.LABEL - LANES.LEVEL})`}>
-                                            <text
-                                                y={0}
-                                                fontSize={14}
-                                                textAnchor="middle"
-                                                className="fill-secondary select-none font-medium pointer-events-none"
-                                            >
-                                                {item.subLabel}
-                                            </text>
-                                        </g>
-                                    </g>
-                                );
-                            }
-
-                            // DIVIDER
-                            if (item.type === 'divider') {
-                                const isPrimary = item.dividerType === 'primary';
-                                const h = isPrimary ? 50 : 30;
-                                const w = isPrimary ? 8 : 6;
-                                return (
-                                    <line
-                                        key={item.id}
-                                        x1={item.x} y1={-h}
-                                        x2={item.x} y2={h}
-                                        strokeWidth={w}
-                                        strokeLinecap="round"
-                                        className="stroke-primary"
-                                        stroke="var(--color-text-primary)"
-                                    />
-                                );
-                            }
-
-                            // NAVIGATION
-                            if (item.type === 'navigation') {
-                                return (
-                                    <g key={item.id} transform={`translate(${item.x}, ${LANES.LEVEL})`}
-                                        data-no-camera
-                                        onPointerDown={e => e.stopPropagation()}
-                                        onClick={(e) => {
-                                            if (item.isPlaceholder || !item.data) return;
-                                            e.stopPropagation();
-                                            handleNavigate(item.data.id);
-                                        }}
-                                        className={`${item.isPlaceholder ? 'opacity-50 cursor-default' : 'cursor-pointer group'}`}
-                                    >
-                                        {/* Hitbox */}
-                                        <rect
-                                            x={-120} y={-40}
-                                            width={240} height={80}
-                                            fill="transparent"
-                                            pointerEvents="all"
-
-                                        />
-                                        <text
-                                            y={5}
-                                            fontSize={34}
-                                            textAnchor="middle"
-                                            className="font-bold fill-[var(--color-text-primary)] group-hover:stroke-[var(--color-accent)] select-none pointer-events-none transition-colors"
-                                        >
-                                            {item.label}
-                                        </text>
-                                    </g>
-                                );
-                            }
-                            return null;
-                        })}
-                    </motion.g>
-                </svg>
-            </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
+    );
+}
+
+export default function TimelineCanvas(props: TimelineCanvasProps) {
+    return (
+        <ReactFlowProvider>
+            <FlowCanvas {...props} />
+        </ReactFlowProvider>
     );
 }

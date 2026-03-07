@@ -6,7 +6,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { INTENSITY_COLORS } from '@/domain/constants';
-import TimelinePath from './TimelinePath';
+
 
 
 
@@ -135,16 +135,6 @@ export default function EventViewer({
                     )}
 
                     {/* Timeline Placeholder */}
-                    <div className="space-y-2">
-                        <h3 className="text-sm font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-2">
-                            <Activity className="w-4 h-4" /> Timeline
-                        </h3>
-                        <TimelinePath
-                            storyId={event.storyId}
-                            timelineId={event.timelineId}
-                            className="text-sm text-muted-foreground bg-accent/5 px-3 py-2 rounded-lg border border-accent/10 block"
-                        />
-                    </div>
 
                     {/* Linked Cards */}
                     {cardLinks?.links?.length > 0 && (

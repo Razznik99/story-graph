@@ -44,36 +44,31 @@ export async function GET(req: NextRequest) {
         };
 
         if (timelineId) {
-            where.timelineId = timelineId;
-        } else if (isTimelineNote) {
-            where.timelineId = { not: null };
-        } else {
-            // General notes (not associated with timeline)
-            // Or if user wants ALL notes, they wouldn't pass isTimelineNote=false/true specifically?
-            // Requirement: "normally notes would have the timelineId field as null"
-            // So if we are fetching "Notes" tab, we want timelineId: null
-            // If we are fetching "Story" tab, we want timelineId: { not: null }
-
-            // Let's assume if isTimelineNote is explicitly 'false', we filter for null.
-            // If undefined, maybe return all? But the tabs are distinct. 
-            // The prompt says "Note tab would show all the notes... normally notes would have timelineId field as null"
-            // "Story tab would show all the timeline notes"
-
-            // So default behavior if no specific timelineId is requested:
-            if (searchParams.has('isTimelineNote')) {
-                if (isTimelineNote) {
-                    where.timelineId = { not: null };
-                } else {
-                    where.timelineId = null;
-                }
+            where.OR = [
+                { timelineId },
+                { branch: { timelineId } },
+                { leaf: { branch: { timelineId } } }
+            ];
+        } else if (searchParams.has('isTimelineNote')) {
+            if (isTimelineNote) {
+                where.OR = [
+                    { timelineId: { not: null } },
+                    { branchId: { not: null } },
+                    { leafId: { not: null } }
+                ];
+            } else {
+                where.timelineId = null;
+                where.branchId = null;
+                where.leafId = null;
             }
         }
 
         if (search) {
-            where.OR = [
-                { title: { contains: search, mode: 'insensitive' } },
-                // { content: { contains: search, mode: 'insensitive' } } // JSON search not supported with simple contains
+            where.AND = [
+                ...(where.OR ? [{ OR: where.OR }] : []),
+                { title: { contains: search, mode: 'insensitive' } }
             ];
+            delete where.OR;
         }
 
         if (tags) {
@@ -90,14 +85,9 @@ export async function GET(req: NextRequest) {
             where,
             orderBy: { updatedAt: 'desc' },
             include: {
-                timeline: {
-                    select: {
-                        id: true,
-                        level: true,
-                        name: true,
-                        title: true, // Needed for display format
-                    }
-                }
+                timeline: { select: { id: true, name: true } },
+                branch: { select: { id: true, name: true, level: true, timelineId: true } },
+                leaf: { select: { id: true, name: true, branch: { select: { timelineId: true } } } }
             }
         });
 

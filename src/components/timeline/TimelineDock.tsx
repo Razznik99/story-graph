@@ -193,7 +193,28 @@ export const useTimelineDock = (storyId?: string) => {
         }
     };
 
-    return { openEventById, openCardById, openEventEditorById, openCardEditorById };
+    const openNewEventEditor = () => {
+        const id = crypto.randomUUID();
+        const tabId = `editor-new-${id}`;
+        addTab({
+            id: tabId,
+            kind: 'editor',
+            entityId: id,
+            title: `New Event`,
+            content: (
+                <div className="h-full w-full" key={tabId}>
+                    <EventEditor
+                        storyId={storyId ?? ''}
+                        onClose={() => removeTab(tabId)}
+                        onDelete={() => removeTab(tabId)}
+                        inline={true}
+                    />
+                </div>
+            )
+        });
+    };
+
+    return { openEventById, openCardById, openEventEditorById, openCardEditorById, openNewEventEditor };
 };
 
 export function TimelineDock() {

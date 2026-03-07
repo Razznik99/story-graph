@@ -2,7 +2,6 @@ import { Event, EventType } from '@/domain/types';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Calendar, Tag } from 'lucide-react';
-import TimelinePath from './TimelinePath';
 
 const INTENSITY_COLORS: Record<string, string> = {
     LOW: 'bg-green-500/10 text-green-600 border-green-500/20',
@@ -44,12 +43,6 @@ export default function EventGridItem({
                         {event.description}
                     </p>
                 )}
-
-                <TimelinePath
-                    storyId={event.storyId}
-                    timelineId={event.timelineId}
-                    className="mt-auto mb-3 p-2 bg-muted/30 rounded-lg border border-border/50 block"
-                />
 
                 {/* Footer */}
                 <div className="pt-3 border-t border-border flex items-center justify-between text-xs text-muted-foreground">

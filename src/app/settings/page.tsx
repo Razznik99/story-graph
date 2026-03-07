@@ -1,7 +1,7 @@
 'use client';
 
-import { useState } from 'react';
-import { useTheme } from 'next-themes';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import ThemeTab from '@/components/settings/ThemeTab';
 import CardsTab from '@/components/settings/CardsTab';
 import StoryTab from '@/components/settings/StoryTab';
@@ -14,11 +14,24 @@ const tabs = [
     { id: 'cards', name: 'Cards' },
     { id: 'events', name: 'Events' },
     { id: 'timeline', name: 'Timeline' },
-    // { id: 'analysis', name: 'Analysis' },
 ];
 
-export default function SettingsPage() {
+function SettingsContent() {
+    const searchParams = useSearchParams();
+    const router = useRouter();
     const [activeTab, setActiveTab] = useState('story');
+
+    useEffect(() => {
+        const tab = searchParams?.get('tab');
+        if (tab && tabs.some(t => t.id === tab)) {
+            setActiveTab(tab);
+        }
+    }, [searchParams]);
+
+    const handleTabChange = (tabId: string) => {
+        setActiveTab(tabId);
+        router.replace(`?tab=${tabId}`);
+    };
 
     return (
         <div className="min-h-screen bg-background p-8">
@@ -26,12 +39,12 @@ export default function SettingsPage() {
 
             {/* Tabs */}
             <div className="border-b border-border mb-6">
-                <nav className="-mb-px flex space-x-6">
+                <nav className="-mb-px flex space-x-6 overflow-x-auto scroller-hide">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`py-2 px-1 text-sm font-medium transition-colors border-b-2 ${activeTab === tab.id
+                            onClick={() => handleTabChange(tab.id)}
+                            className={`py-2 px-1 text-sm font-medium transition-colors border-b-2 whitespace-nowrap ${activeTab === tab.id
                                 ? 'text-accent border-accent'
                                 : 'text-text-secondary border-transparent hover:text-text-primary hover:border-text-secondary'
                                 }`}
@@ -43,31 +56,17 @@ export default function SettingsPage() {
             </div>
 
             {/* Tab Content */}
-            <div>
-                {activeTab === 'story' && (
-                    <StoryTab />
-                )}
+            <div className="animate-in fade-in duration-300">
+                {activeTab === 'story' && <StoryTab />}
+                {activeTab === 'theme' && <ThemeTab />}
+                {activeTab === 'cards' && <CardsTab />}
+                {activeTab === 'events' && <EventsTab />}
+                {activeTab === 'timeline' && <TimelineTab />}
 
-                {activeTab === 'theme' && (
-                    <ThemeTab />
-                )}
-
-                {activeTab === 'cards' && (
-                    <CardsTab />
-                )}
-
-                {activeTab === 'events' && (
-                    <EventsTab />
-                )}
-
-                {activeTab === 'timeline' && (
-                    <TimelineTab />
-                )}
-
-                {activeTab !== 'story' && activeTab !== 'theme' && activeTab !== 'cards' && activeTab !== 'events' && activeTab !== 'timeline' && (
+                {!tabs.some(t => t.id === activeTab) && (
                     <div className="bg-surface p-6 rounded-lg border border-border">
                         <h2 className="text-lg font-semibold mb-2 text-text-primary">
-                            {tabs.find((t) => t.id === activeTab)?.name} Settings
+                            Feature Not Available
                         </h2>
                         <p className="text-text-secondary">
                             This section will be implemented in a future update.
@@ -76,5 +75,13 @@ export default function SettingsPage() {
                 )}
             </div>
         </div>
+    );
+}
+
+export default function SettingsPage() {
+    return (
+        <Suspense fallback={<div className="min-h-screen bg-background p-8 opacity-50"><h1 className="text-2xl font-bold mb-6 text-text-primary">Settings</h1></div>}>
+            <SettingsContent />
+        </Suspense>
     );
 }

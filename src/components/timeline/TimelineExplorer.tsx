@@ -1,717 +1,644 @@
 'use client';
 
 import * as React from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
-    listTLNodes,
-    updateTLNodeLabel,
-    getTimelineConfig,
-    createTLNode,
-    deleteTLNode,
+    getTimelineGraphs,
+    createTimeline,
+    renameTimeline,
+    deleteTimeline,
+    createBranch,
+    renameBranch,
+    reorderBranch,
+    deleteBranch,
+    createLeaf,
+    renameLeaf,
+    reorderLeaf,
+    deleteLeaf,
     listEvents,
-    placeEvent,
-    listPlacedEvents,
-    reorderPlacedEvent,
-    deleteEvent,
-    reorderTLNode,
-    insertSiblingTLNode,
-    unplaceEvent,
-    TLNode,
-    PlacedEvent,
-    TimelineConfig,
-    Event as IEvent,
+    duplicateEvent,
+    deleteNode,
+    TimelineGraph,
+    Branch,
+    Leaf,
+    Timeline,
 } from '@/lib/timeline-api';
 import { useStoryStore } from '@/store/useStoryStore';
+import { useTimelineStore } from '@/store/useTimelineStore';
 import {
-    ChevronRight,
-    ChevronDown,
-    Folder,
-    FolderPen,
-    MoreHorizontal,
-    CirclePlus,
-    Trash2,
-    ArrowUp,
-    ArrowDown,
-    CornerUpLeft,
-    X,
-    SquareArrowOutUpRight,
-    FolderPlus,
-    Redo2,
-    FolderDown,
-    FolderUp,
-    ChevronsUp,
-    ChevronsDown
+    ChevronRight, ChevronDown, Folder, FolderPen, MoreHorizontal,
+    Trash2, ArrowUp, ArrowDown, SquareArrowOutUpRight, FolderPlus,
+    CirclePlus, GitCompareArrows, FoldVertical, RefreshCw, GitFork,
+    ArrowDownNarrowWide, ExternalLink, GitCommitHorizontal, Circle, Settings, Copy
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { useTimelineDock } from './TimelineDock';
-import {
-    buildIndex,
-    nextLevels,
-    getLevelName,
-    getDerivedNumber,
-    type NodeIndex,
-} from './timeline-explorer-helpers';
-
+import { calculateBranchNumbers, calculateLeafNumbers } from './timeline-explorer-helpers';
+import { BranchIcon } from '@/components/notes/StoryNoteList';
+import { useTimelineDock } from '@/components/timeline/TimelineDock';
+import CanvasWizard from '@/components/timeline/CanvasWizard';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { SearchableSelect } from '@/components/ui/searchable-select';
 import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuLabel,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubTrigger,
-    DropdownMenuSubContent,
-    DropdownMenuTrigger,
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu';
-import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-} from '@/components/ui/dialog';
-import { INTENSITY_COLORS } from '@/domain/constants';
-import { useTimelineStore } from '@/store/useTimelineStore';
-
-type ExpandMap = Record<string, boolean>;
-type EditingMap = Record<string, boolean>;
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 export default function TimelineExplorer() {
     const qc = useQueryClient();
+    const router = useRouter();
     const { selectedStoryId } = useStoryStore();
-    const dock = useTimelineDock(selectedStoryId ?? undefined);
 
-    // --- queries ---
-    const { data: cfg } = useQuery<TimelineConfig | null>({
-        queryKey: ['tl', 'config', selectedStoryId],
-        queryFn: async () => {
-            if (!selectedStoryId) return null;
-            return await getTimelineConfig(selectedStoryId);
-        },
+    const { data: graphs = [], isLoading, refetch } = useQuery({
+        queryKey: ['tl', 'graphs', selectedStoryId],
+        queryFn: () => selectedStoryId ? getTimelineGraphs(selectedStoryId) : Promise.resolve([]),
         enabled: !!selectedStoryId,
     });
 
-    const { data: nodes = [], isLoading } = useQuery({
-        queryKey: ['tl', 'nodes', selectedStoryId],
-        queryFn: () => (selectedStoryId ? listTLNodes(selectedStoryId) : Promise.resolve([])),
+    const { data: events = [] } = useQuery({
+        queryKey: ['tl', 'events', selectedStoryId],
+        queryFn: () => selectedStoryId ? listEvents(selectedStoryId) : Promise.resolve([]),
         enabled: !!selectedStoryId,
     });
 
-    const { data: allEvents = [] } = useQuery<IEvent[]>({
-        queryKey: ['events', 'all', selectedStoryId],
-        queryFn: async () => {
-            if (!selectedStoryId) return [];
-            return await listEvents(selectedStoryId);
-        },
-        enabled: !!selectedStoryId,
-        staleTime: 60_000,
-    });
+    const dock = useTimelineDock(selectedStoryId || undefined);
 
-    // Placed events (using listPlacedEvents which maps to events with timelineId)
-    const { data: placed = [] } = useQuery<PlacedEvent[]>({
-        queryKey: ['tl', 'placed-events', 'all', selectedStoryId],
-        queryFn: () => (selectedStoryId ? listPlacedEvents(selectedStoryId) : Promise.resolve([])),
-        enabled: !!selectedStoryId,
-        staleTime: 15_000,
-    });
+    const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
+    const [editing, setEditing] = React.useState<Record<string, boolean>>({});
+    const [swapDialogOpen, setSwapDialogOpen] = React.useState(false);
+    const [activeGraphId, setActiveGraphId] = React.useState<string | null>(null);
+    const [isEventsOpen, setIsEventsOpen] = React.useState(false);
+    const [eventFilter, setEventFilter] = React.useState<'All' | 'Used' | 'Unused'>('Unused');
+    const [wizardEventId, setWizardEventId] = React.useState<string | null>(null);
 
-    // --- local state ---
-    const [expanded, setExpanded] = React.useState<ExpandMap>({});
-    const [editing, setEditing] = React.useState<EditingMap>({});
-    const [addEventNode, setAddEventNode] = React.useState<TLNode | null>(null);
-    const [addEventDialogOpen, setAddEventDialogOpen] = React.useState(false);
-    // Which scope for adding events: 'unplaced' (default) or 'all'
-    const [addEventScope, setAddEventScope] = React.useState<'unplaced' | 'all'>('unplaced');
+    const toggle = (id: string) => setExpanded(m => ({ ...m, [id]: !(m[id] ?? true) }));
+    const startEdit = (id: string) => setEditing(m => ({ ...m, [id]: true }));
+    const stopEdit = (id: string) => setEditing(m => ({ ...m, [id]: false }));
 
-    // --- mutations ---
-    const renameMut = useMutation({
-        mutationFn: ({ id, label }: { id: string; label: string }) => updateTLNodeLabel(id, label),
-        onSuccess: () => {
-            toast.success('Renamed');
-            qc.invalidateQueries({ queryKey: ['tl', 'nodes', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Rename failed'),
-    });
+    const invalidate = () => qc.invalidateQueries({ queryKey: ['tl', 'graphs', selectedStoryId] });
 
-    const createMut = useMutation({
-        mutationFn: (p: { level: number; parentId?: string; title?: string }) =>
-            createTLNode(selectedStoryId!, p.level, p.parentId, p.title),
-        onSuccess: () => {
-            toast.success('Sub-level added');
-            qc.invalidateQueries({ queryKey: ['tl', 'nodes', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Create failed'),
-    });
+    const currentLevelId = useTimelineStore(s => s.currentLevelId);
+    const setCurrentLevelId = useTimelineStore(s => s.setCurrentLevelId);
+    const setFocusEventId = useTimelineStore(s => s.setFocusEventId);
+    const [hasHydrated, setHasHydrated] = React.useState(false);
+    React.useEffect(() => { setHasHydrated(true); }, []);
 
-    const insertSiblingMut = useMutation({
-        mutationFn: (p: { targetId: string; position: 'before' | 'after'; title?: string }) =>
-            insertSiblingTLNode(selectedStoryId!, p.targetId, p.position, p.title),
-        onSuccess: () => {
-            toast.success('Level inserted');
-            qc.invalidateQueries({ queryKey: ['tl', 'nodes', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Insert failed'),
-    });
+    // Auto-select first graph if none selected
+    React.useEffect(() => {
+        if (!hasHydrated || graphs.length === 0) return;
 
-    const reorderNodeMut = useMutation({
-        mutationFn: (p: { id: string; direction: 'up' | 'down' }) =>
-            reorderTLNode(selectedStoryId!, p.id, p.direction),
-        onSuccess: () => {
-            toast.success('Level moved');
-            qc.invalidateQueries({ queryKey: ['tl', 'nodes', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Move failed'),
-    });
-
-    const deleteMut = useMutation({
-        mutationFn: (id: string) => deleteTLNode(id),
-        onSuccess: () => {
-            toast.success('Level deleted');
-            qc.invalidateQueries({ queryKey: ['tl', 'nodes', selectedStoryId] });
-            qc.invalidateQueries({ queryKey: ['tl', 'placed-events', 'all', selectedStoryId] });
-            qc.invalidateQueries({ queryKey: ['events', 'all', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Delete failed'),
-    });
-
-    const placeMut = useMutation({
-        mutationFn: (p: { eventId: string; tlNodeId: string }) => placeEvent(p.eventId, p.tlNodeId),
-        onSuccess: () => {
-            toast.success('Event moved');
-            qc.invalidateQueries({ queryKey: ['tl', 'placed-events', 'all', selectedStoryId] });
-            qc.invalidateQueries({ queryKey: ['events', 'all', selectedStoryId] });
-            setAddEventDialogOpen(false);
-            setAddEventNode(null);
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Could not place event'),
-    });
-
-    const unplaceMut = useMutation({
-        mutationFn: (eventId: string) => unplaceEvent(eventId),
-        onSuccess: () => {
-            toast.success('Event unplaced');
-            qc.invalidateQueries({ queryKey: ['tl', 'placed-events', 'all', selectedStoryId] });
-            qc.invalidateQueries({ queryKey: ['events', 'all', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Could not unplace'),
-    });
-
-
-    const reorderEventMut = useMutation({
-        mutationFn: (p: { eventId: string; direction: 'up' | 'down' }) =>
-            reorderPlacedEvent(p.eventId, p.direction),
-        onSuccess: () => {
-            qc.invalidateQueries({ queryKey: ['tl', 'placed-events', 'all', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Reorder failed'),
-    });
-
-    const deleteEventMut = useMutation({
-        mutationFn: (eventId: string) => deleteEvent(eventId),
-        onSuccess: () => {
-            toast.success('Event deleted');
-            qc.invalidateQueries({ queryKey: ['tl', 'placed-events', 'all', selectedStoryId] });
-            qc.invalidateQueries({ queryKey: ['events', 'all', selectedStoryId] });
-        },
-        onError: (e: Error) => toast.error(e?.message ?? 'Delete failed'),
-    });
-
-    // --- computed ---
-    const byParent = React.useMemo(() => buildIndex(nodes), [nodes]);
-    const rootNode = React.useMemo(() => nodes.find((n) => n.parentId === null && n.level === 1), [nodes]);
-
-    const eventsByNode = React.useMemo(() => {
-        const m = new Map<string, PlacedEvent[]>();
-        placed.forEach((pe) => {
-            if (pe.timelineId) {
-                const arr = m.get(pe.timelineId) ?? [];
-                arr.push({ ...pe, nodeId: pe.timelineId });
-                m.set(pe.timelineId, arr);
+        let foundGraphId: string | null = null;
+        if (currentLevelId) {
+            for (const g of graphs) {
+                if (g.id === currentLevelId) {
+                    foundGraphId = g.id; break;
+                }
+                const findInBranches = (branches: any[]): string | null => {
+                    for (const b of branches) {
+                        if (b.id === currentLevelId) return g.id;
+                        if (b.leaves?.some((l: any) => l.id === currentLevelId)) return g.id;
+                        if (b.childBranches) {
+                            const childFound = findInBranches(b.childBranches);
+                            if (childFound) return childFound;
+                        }
+                    }
+                    return null;
+                };
+                foundGraphId = findInBranches(g.branches || []);
+                if (foundGraphId) break;
             }
-        });
-        m.forEach((arr) => arr.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-        return m;
-    }, [placed]);
-
-    const rootNodeId = rootNode?.id;
-
-    const availableEventsForAdd = React.useMemo(() => {
-        if (!addEventNode) return [];
-
-        let candidates = allEvents;
-
-        if (addEventScope === 'unplaced') {
-            // "Unplaced" means timelineId is null OR timelineId is rootNodeId
-            candidates = allEvents.filter(e => !e.timelineId || (rootNodeId && e.timelineId === rootNodeId));
         }
 
-        // Filter out events that are already in the target node (redundant to add)
-        return candidates
-            .filter(e => e.timelineId !== addEventNode.id)
-            .map(e => ({
-                label: e.title,
-                value: e.id,
-                description: e.intensity
-            }));
-    }, [allEvents, addEventNode, addEventScope, rootNodeId]);
+        if (foundGraphId) {
+            if (activeGraphId !== foundGraphId) setActiveGraphId(foundGraphId);
+        } else if (!activeGraphId || !graphs.find(g => g.id === activeGraphId)) {
+            if (graphs[0]) {
+                setActiveGraphId(graphs[0].id);
+                setCurrentLevelId(graphs[0].id);
+            }
+        }
+    }, [graphs, currentLevelId, activeGraphId, hasHydrated, setCurrentLevelId]);
 
+    const activeGraph = graphs.find(g => g.id === activeGraphId) || graphs[0];
 
-    // actions
-    const toggle = (id: string) => setExpanded((m) => ({ ...m, [id]: !(m[id] ?? true) })); // default expanded
-    const startEdit = (id: string) => setEditing((m) => ({ ...m, [id]: true }));
-    const stopEdit = (id: string) => setEditing((m) => ({ ...m, [id]: false }));
+    const createTlMut = useMutation({
+        mutationFn: () => createTimeline(selectedStoryId!),
+        onSuccess: (newTl) => {
+            invalidate();
+            setActiveGraphId(newTl.id);
+            setCurrentLevelId(newTl.id);
+            setSwapDialogOpen(false);
+        }
+    });
 
-    const handleAddEventClick = (n: TLNode) => {
-        setAddEventNode(n);
-        setAddEventScope('unplaced'); // reset to default
-        setAddEventDialogOpen(true);
+    // Mutations for Timeline
+    const renameTlMut = useMutation({ mutationFn: (p: { id: string, title: string }) => renameTimeline(p.id, p.title), onSuccess: invalidate });
+    const deleteTlMut = useMutation({
+        mutationFn: (id: string) => deleteTimeline(id), onSuccess: () => {
+            invalidate();
+            setActiveGraphId(null);
+        }
+    });
+
+    // Mutations for Branch
+    const createBranchMut = useMutation({
+        mutationFn: (p: { tlId: string, parentId?: string, title?: string, position?: 'above' | 'below', referenceId?: string }) => createBranch(p.tlId, p.parentId, p.title, p.position, p.referenceId),
+        onSuccess: invalidate
+    });
+    const renameBranchMut = useMutation({ mutationFn: (p: { id: string, title: string }) => renameBranch(p.id, p.title), onSuccess: invalidate });
+    const reorderBranchMut = useMutation({ mutationFn: (p: { id: string, dir: 'up' | 'down' }) => reorderBranch(p.id, p.dir), onSuccess: invalidate });
+    const deleteBranchMut = useMutation({ mutationFn: (id: string) => deleteBranch(id), onSuccess: invalidate });
+
+    // Mutations for Leaf
+    const createLeafMut = useMutation({
+        mutationFn: (p: { branchId: string, title?: string, position?: 'above' | 'below', referenceId?: string }) => createLeaf(p.branchId, p.title, p.position, p.referenceId),
+        onSuccess: invalidate
+    });
+    const renameLeafMut = useMutation({ mutationFn: (p: { id: string, title: string }) => renameLeaf(p.id, p.title), onSuccess: invalidate });
+    const reorderLeafMut = useMutation({ mutationFn: (p: { id: string, dir: 'up' | 'down' }) => reorderLeaf(p.id, p.dir), onSuccess: invalidate });
+    const deleteLeafMut = useMutation({ mutationFn: (id: string) => deleteLeaf(id), onSuccess: invalidate });
+
+    if (!selectedStoryId) return <div className="p-4 text-sm text-text-muted">Please select a story.</div>;
+    if (isLoading) return <div className="p-4 text-sm text-text-muted">Loading timeline...</div>;
+
+    if (graphs.length === 0) {
+        return (
+            <div className="p-4 flex flex-col gap-4">
+                <span className="text-sm text-text-muted">No timeline exists.</span>
+                <Button size="sm" onClick={() => createTlMut.mutate()}>Create Timeline</Button>
+            </div>
+        );
+    }
+
+    if (!activeGraph) return <div className="p-4 text-sm text-text-muted">No active timeline.</div>;
+
+    const branchNums = calculateBranchNumbers(activeGraph, activeGraph);
+    const leafNums = calculateLeafNumbers(activeGraph, activeGraph);
+
+    // Organize branches into a tree
+    type RichBranch = TimelineGraph['branches'][0];
+    const rootBranches = activeGraph.branches.filter(b => !b.parentBranchId);
+    const byParentBranch = new Map<string, RichBranch[]>();
+    activeGraph.branches.forEach(b => {
+        const pid = b.parentBranchId;
+        if (pid) {
+            if (!byParentBranch.has(pid)) byParentBranch.set(pid, []);
+            byParentBranch.get(pid)!.push(b);
+        }
+    });
+
+    // Determine used events in current timeline
+    const usedEventIds = new Set<string>();
+    activeGraph.branches.forEach(b => {
+        b.leaves?.forEach(l => {
+            (l as any).nodes?.forEach((n: any) => {
+                if (n.eventId) usedEventIds.add(n.eventId);
+            });
+        });
+    });
+
+    const filteredEvents = events.filter(e => {
+        if (eventFilter === 'Used') return usedEventIds.has(e.id);
+        if (eventFilter === 'Unused') return !usedEventIds.has(e.id);
+        return true;
+    });
+
+    const renderBranch = (branch: RichBranch, depth: number) => {
+        const isExp = expanded[branch.id] ?? true;
+        const children = byParentBranch.get(branch.id) || [];
+        const leaves = branch.leaves || [];
+        const hasChildren = children.length > 0 || leaves.length > 0;
+        const num = branchNums.get(branch.id);
+
+        let bName = activeGraph.branch1Name;
+        if (branch.level === 2) bName = activeGraph.branch2Name || activeGraph.branch1Name;
+        if (branch.level === 3) bName = activeGraph.branch3Name || activeGraph.branch2Name || activeGraph.branch1Name;
+
+        const isB2Active = !!(activeGraph.branch2Name && activeGraph.branch2Name.trim() !== '');
+        const isB3Active = !!(activeGraph.branch3Name && activeGraph.branch3Name.trim() !== '');
+
+        let canCreateSubBranch = false;
+        let canCreateLeaf = false;
+
+        if (branch.level === 1) {
+            if (isB2Active || isB3Active) canCreateSubBranch = true;
+            else canCreateLeaf = true;
+        } else if (branch.level === 2) {
+            if (isB3Active) canCreateSubBranch = true;
+            else canCreateLeaf = true;
+        } else {
+            canCreateLeaf = true;
+        }
+
+        const menuItems = [
+            <DropdownMenuItem key="rename" onClick={(e) => { e.stopPropagation(); startEdit(branch.id); }}><BranchIcon state="start" className="h-3 w-3 mr-2" /> Rename</DropdownMenuItem>,
+            <DropdownMenuSeparator key="sep1" />
+        ];
+
+        if (canCreateSubBranch) {
+            menuItems.push(
+                <DropdownMenuItem key="addsub" onClick={(e) => { e.stopPropagation(); createBranchMut.mutate({ tlId: activeGraph.id, parentId: branch.id }); }}>
+                    <FolderPlus className="h-3 w-3 mr-2" /> Add Sub-Branch
+                </DropdownMenuItem>
+            );
+        }
+        if (canCreateLeaf) {
+            menuItems.push(
+                <DropdownMenuItem key="addleaf" onClick={(e) => { e.stopPropagation(); createLeafMut.mutate({ branchId: branch.id }); }}>
+                    <CirclePlus className="h-3 w-3 mr-2" /> Add Leaf
+                </DropdownMenuItem>
+            );
+        }
+
+        menuItems.push(
+            <DropdownMenuSeparator key="sep_insert" />,
+            <DropdownMenuItem key="insert_above" onClick={(e) => { e.stopPropagation(); createBranchMut.mutate({ tlId: activeGraph.id, ...(branch.parentBranchId ? { parentId: branch.parentBranchId } : {}), position: 'above', referenceId: branch.id }); }}><FolderPlus className="h-3 w-3 mr-2" /> Insert Above</DropdownMenuItem>,
+            <DropdownMenuItem key="insert_below" onClick={(e) => { e.stopPropagation(); createBranchMut.mutate({ tlId: activeGraph.id, ...(branch.parentBranchId ? { parentId: branch.parentBranchId } : {}), position: 'below', referenceId: branch.id }); }}><FolderPlus className="h-3 w-3 mr-2" /> Insert Below</DropdownMenuItem>,
+            <DropdownMenuSeparator key="sep2" />,
+            <DropdownMenuItem key="up" onClick={(e) => { e.stopPropagation(); reorderBranchMut.mutate({ id: branch.id, dir: 'up' }); }}><ArrowUp className="h-3 w-3 mr-2" /> Move Up</DropdownMenuItem>,
+            <DropdownMenuItem key="down" onClick={(e) => { e.stopPropagation(); reorderBranchMut.mutate({ id: branch.id, dir: 'down' }); }}><ArrowDown className="h-3 w-3 mr-2" /> Move Down</DropdownMenuItem>,
+            <DropdownMenuSeparator key="sep3" />,
+            <DropdownMenuItem key="del" className="text-error" onClick={(e) => { e.stopPropagation(); if (confirm('Delete Branch?')) deleteBranchMut.mutate(branch.id); }}><Trash2 className="h-3 w-3 mr-2" /> Delete</DropdownMenuItem>
+        );
+
+        // determine branch state from level for BranchIcon
+        let branchIconState: 'start' | 'center' | 'end' = 'start';
+        if (branch.level === 2) branchIconState = 'center';
+        if (branch.level === 3) branchIconState = 'end';
+
+        return (
+            <div key={branch.id} className={cn("relative", depth > 0 && "ml-4 pl-2 border-l border-border/40")}>
+                <ExplorerItem
+                    title={branch.title}
+                    baseName={`${bName} ${num}`}
+                    isExpanded={isExp}
+                    hasChildren={hasChildren}
+                    isEditing={editing[branch.id]}
+                    onToggle={() => toggle(branch.id)}
+                    onStartEdit={() => startEdit(branch.id)}
+                    onSave={(val: string) => { renameBranchMut.mutate({ id: branch.id, title: val }); stopEdit(branch.id); }}
+                    onCancel={() => stopEdit(branch.id)}
+                    menuItems={menuItems}
+                    icon={<BranchIcon state={branchIconState} className={cn("h-4 w-4 shrink-0", isExp ? "text-accent" : "text-text-muted")} />}
+                />
+                {isExp && (
+                    <div className="animate-accordion-down">
+                        {/* Render Leaves */}
+                        {leaves.map((leaf: Leaf) => {
+                            const lNum = leafNums.get(leaf.id);
+                            const leafNodes = (leaf as any).nodes || [];
+                            const eventNodes = leafNodes.filter((n: any) => n.type === 'EVENT' && n.event);
+
+                            return (
+                                <div key={leaf.id} className="ml-4 pl-2 border-l border-border/40">
+                                    <ExplorerItem
+                                        title={leaf.title}
+                                        baseName={`${activeGraph.leafName} ${lNum}`}
+                                        isExpanded={expanded[leaf.id] ?? true}
+                                        hasChildren={eventNodes.length > 0}
+                                        isEditing={editing[leaf.id]}
+                                        onToggle={() => toggle(leaf.id)}
+                                        onStartEdit={() => startEdit(leaf.id)}
+                                        onSave={(val: string) => { renameLeafMut.mutate({ id: leaf.id, title: val }); stopEdit(leaf.id); }}
+                                        onCancel={() => stopEdit(leaf.id)}
+                                        menuItems={[
+                                            <DropdownMenuItem key="rename" onClick={(e) => { e.stopPropagation(); startEdit(leaf.id); }}><BranchIcon state="end" className="h-3 w-3 mr-2" /> Rename</DropdownMenuItem>,
+                                            <DropdownMenuSeparator key="sep1" />,
+                                            <DropdownMenuItem key="insert_above" onClick={(e) => { e.stopPropagation(); createLeafMut.mutate({ branchId: branch.id, position: 'above', referenceId: leaf.id }); }}><CirclePlus className="h-3 w-3 mr-2" /> Insert Above</DropdownMenuItem>,
+                                            <DropdownMenuItem key="insert_below" onClick={(e) => { e.stopPropagation(); createLeafMut.mutate({ branchId: branch.id, position: 'below', referenceId: leaf.id }); }}><CirclePlus className="h-3 w-3 mr-2" /> Insert Below</DropdownMenuItem>,
+                                            <DropdownMenuSeparator key="sep2" />,
+                                            <DropdownMenuItem key="up" onClick={(e) => { e.stopPropagation(); reorderLeafMut.mutate({ id: leaf.id, dir: 'up' }); }}><ArrowUp className="h-3 w-3 mr-2" /> Move Up</DropdownMenuItem>,
+                                            <DropdownMenuItem key="down" onClick={(e) => { e.stopPropagation(); reorderLeafMut.mutate({ id: leaf.id, dir: 'down' }); }}><ArrowDown className="h-3 w-3 mr-2" /> Move Down</DropdownMenuItem>,
+                                            <DropdownMenuSeparator key="sep3" />,
+                                            <DropdownMenuItem key="del" className="text-error" onClick={(e) => { e.stopPropagation(); if (confirm('Delete Leaf?')) deleteLeafMut.mutate(leaf.id); }}><Trash2 className="h-3 w-3 mr-2" /> Delete</DropdownMenuItem>
+                                        ]}
+                                        icon={<BranchIcon state="end" className={cn("h-4 w-4 shrink-0", expanded[leaf.id] ? "text-accent" : "text-text-muted")} />}
+                                    />
+                                    {(expanded[leaf.id] !== false) && eventNodes.length > 0 && (
+                                        <div className="ml-4 pl-2 border-l border-border/40 pb-1">
+                                            {eventNodes.map((n: any) => {
+                                                const ev = n.event;
+                                                const inDock = (!n.incomingEdges || n.incomingEdges.length === 0) && (!n.outgoingEdges || n.outgoingEdges.length === 0);
+                                                return (
+                                                    <ExplorerEventItem
+                                                        key={n.id}
+                                                        title={ev.title || 'Untitled Event'}
+                                                        inDock={inDock}
+                                                        onClick={() => {
+                                                            setCurrentLevelId(activeGraphId);
+                                                            setFocusEventId(ev.id);
+                                                        }}
+                                                        onViewCanvas={() => {
+                                                            setCurrentLevelId(activeGraphId);
+                                                            setFocusEventId(ev.id);
+                                                        }}
+                                                        onViewDock={() => dock.openEventById(ev.id)}
+                                                        onManageConnection={() => setWizardEventId(ev.id)}
+                                                        onDuplicate={async () => {
+                                                            try {
+                                                                await duplicateEvent(ev.id, selectedStoryId!);
+                                                                qc.invalidateQueries({ queryKey: ['tl'] });
+                                                                toast.success('Event duplicated');
+                                                            } catch (e: any) {
+                                                                toast.error(e.message || 'Error duplicating event');
+                                                            }
+                                                        }}
+                                                        onRemove={async () => {
+                                                            if (confirm('Delete this event node from the timeline?')) {
+                                                                try {
+                                                                    await deleteNode(n.id);
+                                                                    qc.invalidateQueries({ queryKey: ['tl'] });
+                                                                    toast.success('Node removed');
+                                                                } catch (e: any) {
+                                                                    toast.error(e.message);
+                                                                }
+                                                            }
+                                                        }}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })}
+                        {/* Render SubBranches */}
+                        {children.map(child => renderBranch(child, depth + 1))}
+                    </div>
+                )}
+            </div>
+        );
     };
 
-    const getSiblings = React.useCallback(
-        (nodeId: string) => {
-            const node = nodes.find((n) => n.id === nodeId);
-            if (!node) return { parentId: null, siblings: [] as TLNode[], idx: -1 };
-            const parentId = node.parentId ?? null;
-            const siblings = (byParent.get(parentId) || []).slice();
-            // Assuming byParent is sorted by position already or we rely on API order which is sorted
-            const idx = siblings.findIndex((s) => s.id === nodeId);
-            return { parentId, siblings, idx };
-        },
-        [nodes, byParent]
-    );
-
-    if (!selectedStoryId) {
-        return <div className="p-4 text-sm text-text-muted">Please select a story.</div>;
-    }
-    if (isLoading) return <div className="p-4 text-sm text-text-muted">Loading timeline...</div>;
-    if (!cfg) return <div className="p-4 text-sm text-text-muted">No configuration found.</div>;
-    if (!rootNode) return <div className="p-4 text-sm text-text-muted">Initializing timeline...</div>;
-
     return (
-        <>
-            <div className="h-full flex flex-col bg-surface">
-                <ScrollArea className="flex-1">
+        <div className="flex flex-col h-full bg-surface">
+            <div className="flex-1 min-h-0">
+                <ScrollArea className="h-full bg-surface">
                     <div className="p-2 pb-12">
-                        <TreeNode
-                            node={rootNode}
-                            byParent={byParent}
-                            expanded={expanded}
-                            toggle={toggle}
-                            editing={editing}
-                            startEdit={startEdit}
-                            stopEdit={stopEdit}
-                            rename={(id, label) => renameMut.mutate({ id, label })}
-                            cfg={cfg}
-                            eventsByNode={eventsByNode}
-                            onAddSubLevel={(n, lvl) => createMut.mutate({ level: lvl, parentId: n.id })}
-                            onInsertSibling={(n, pos) => insertSiblingMut.mutate({ targetId: n.id, position: pos })}
-                            onAddEvent={handleAddEventClick}
-                            onReorderNode={(n, dir) => reorderNodeMut.mutate({ id: n.id, direction: dir })}
-                            onDelete={(n) => {
-                                if (n.parentId === null && n.level === 1) {
-                                    toast.error('Cannot delete the Story root');
-                                    return;
-                                }
-                                if (window.confirm('Delete this level and all its contents? Events will return to Unplaced.')) {
-                                    deleteMut.mutate(n.id);
-                                }
-                            }}
-                            onOpenEvent={(ev) => dock.openEventById(ev.id)}
-                            onReorderEvent={(ev, dir) => reorderEventMut.mutate({ eventId: ev.id, direction: dir })}
-                            onMoveEventToNode={(ev, nodeId) => placeMut.mutate({ eventId: ev.id, tlNodeId: nodeId })}
-                            onUnplaceEvent={(ev) => unplaceMut.mutate(ev.id)}
-                            onDeleteEvent={(ev) => {
-                                if (window.confirm('Permanently delete this event?')) {
-                                    deleteEventMut.mutate(ev.id);
-                                }
-                            }}
-                            getSiblings={getSiblings}
-                            nodes={nodes}
-                            isRoot={true}
-                        />
+                        {/* Top Timeline Header */}
+                        <div className="group flex flex-col mb-4 p-2 bg-background border border-border rounded shadow-sm">
+                            <div className="flex items-center justify-between">
+                                {editing[activeGraph.id] ? (
+                                    <Input
+                                        value={activeGraph.name}
+                                        onChange={(e) => renameTlMut.mutate({ id: activeGraph.id, title: e.target.value })}
+                                        onBlur={() => stopEdit(activeGraph.id)}
+                                        // Make sure we update name internally while typing to give instant visual feedback
+                                        onKeyDown={(e) => {
+                                            if (e.key === 'Enter' || e.key === 'Escape') stopEdit(activeGraph.id);
+                                        }}
+                                        className="h-7 py-1 px-2 text-sm w-full focus-within:ring-accent"
+                                        autoFocus
+                                    />
+                                ) : (
+                                    <span
+                                        className="text-sm font-semibold text-text-primary cursor-pointer hover:underline truncate"
+                                        onClick={() => setCurrentLevelId(activeGraphId)}
+                                        onDoubleClick={() => startEdit(activeGraph.id)}
+                                    >
+                                        {activeGraph.name}
+                                    </span>
+                                )}
+                                <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 shrink-0 ml-2">
+                                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-text-muted hover:text-text-primary" onClick={() => refetch()} title="Refresh Timeline">
+                                        <RefreshCw className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-text-muted hover:text-text-primary" onClick={() => createBranchMut.mutate({ tlId: activeGraph.id })} title="Add Branch">
+                                        <ArrowDownNarrowWide className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-text-muted hover:text-text-primary" onClick={() => setSwapDialogOpen(true)} title="Swap Timeline">
+                                        <GitCompareArrows className="h-3.5 w-3.5" />
+                                    </Button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                            {rootBranches.map(b => renderBranch(b, 0))}
+                        </div>
                     </div>
                 </ScrollArea>
             </div>
 
-            <Dialog open={addEventDialogOpen} onOpenChange={setAddEventDialogOpen}>
-                <DialogContent className="sm:max-w-md bg-surface border-border">
-                    <DialogHeader>
-                        <DialogTitle>Add Event to {addEventNode?.title || (addEventNode ? getLevelName(addEventNode.level, cfg) : 'Level')}</DialogTitle>
-                    </DialogHeader>
-
-                    <div className="space-y-4 pt-4">
-                        <div className="flex items-center gap-4 text-sm">
-                            <span className={cn("cursor-pointer px-2 py-1 rounded transition-colors", addEventScope === 'unplaced' ? "bg-accent/20 text-accent font-medium" : "text-muted-foreground hover:text-foreground")} onClick={() => setAddEventScope('unplaced')}>
-                                Unplaced Only
-                            </span>
-                            <span className="w-px h-4 bg-border" />
-                            <span className={cn("cursor-pointer px-2 py-1 rounded transition-colors", addEventScope === 'all' ? "bg-accent/20 text-accent font-medium" : "text-muted-foreground hover:text-foreground")} onClick={() => setAddEventScope('all')}>
-                                All Events
-                            </span>
+            {/* Events Drawer */}
+            <div className={cn("flex flex-col border-t border-border transition-all duration-300", isEventsOpen ? "h-[40%] min-h-[200px]" : "h-10")}>
+                <div
+                    className="h-10 flex items-center justify-between px-4 cursor-pointer hover:bg-surface-hover select-none bg-surface-2 shrink-0 border-b border-border/50"
+                    onClick={() => setIsEventsOpen(!isEventsOpen)}
+                >
+                    <span className="text-sm font-semibold text-text-primary">Events ({events.filter(e => !usedEventIds.has(e.id)).length})</span>
+                    <div className="flex items-center gap-2">
+                        <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-6 w-6 text-text-muted hover:text-text-primary"
+                            onClick={(e) => { e.stopPropagation(); setIsEventsOpen(true); dock.openNewEventEditor(); }}
+                            title="Create New Event"
+                        >
+                            <CirclePlus className="h-4 w-4" />
+                        </Button>
+                        {isEventsOpen ? <ChevronDown className="h-4 w-4 text-text-muted" /> : <ChevronRight className="h-4 w-4 text-text-muted" />}
+                    </div>
+                </div>
+                {isEventsOpen && (
+                    <div className="flex-1 flex flex-col min-h-0 bg-background">
+                        <div className="flex items-center gap-2 p-2 border-b border-border text-xs shrink-0">
+                            {(['All', 'Used', 'Unused'] as const).map(f => (
+                                <button
+                                    key={f}
+                                    onClick={() => setEventFilter(f)}
+                                    className={cn("px-2 py-1 rounded transition-colors", eventFilter === f ? "bg-accent text-accent-foreground" : "hover:bg-surface-hover text-text-muted")}
+                                >
+                                    {f}
+                                </button>
+                            ))}
                         </div>
+                        <ScrollArea className="flex-1">
+                            <div className="p-2 flex flex-col gap-1">
+                                {filteredEvents.length === 0 && (
+                                    <p className="text-xs text-text-muted text-center py-4">No events found.</p>
+                                )}
+                                {filteredEvents.map(ev => {
+                                    const isUsed = usedEventIds.has(ev.id);
+                                    return (
+                                        <div key={ev.id} className="flex flex-col p-2 text-sm border border-border rounded bg-surface hover:bg-surface-hover group transition-colors">
+                                            <div className="flex items-center justify-between">
+                                                <span className="font-medium text-text-primary truncate">{ev.title || 'Untitled Event'}</span>
+                                                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                    <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-text-muted hover:text-text-primary" onClick={(e) => { e.stopPropagation(); dock.openEventById(ev.id); }} title="View in Dock">
+                                                        <ExternalLink className="h-3.5 w-3.5" />
+                                                    </Button>
+                                                    {!isUsed && (
+                                                        <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-text-muted hover:text-text-primary" onClick={(e) => { e.stopPropagation(); setWizardEventId(ev.id); }} title="Place in Timeline">
+                                                            <GitCommitHorizontal className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )
+                                })}
+                            </div>
+                        </ScrollArea>
+                    </div>
+                )}
+            </div>
 
-                        <SearchableSelect
-                            options={availableEventsForAdd}
-                            placeholder="Select an event..."
-                            searchPlaceholder="Search events..."
-                            onChange={(val) => {
-                                if (val && addEventNode) {
-                                    placeMut.mutate({ eventId: val, tlNodeId: addEventNode.id });
-                                }
-                            }}
-                            resetAfterSelect={false}
-                            className="w-full"
-                            fullWidth
-                            emptyMessage="No events found."
-                        />
+            {/* Swap Timeline Dialog */}
+            <Dialog open={swapDialogOpen} onOpenChange={setSwapDialogOpen}>
+                <DialogContent className="max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>Swap Timeline</DialogTitle>
+                    </DialogHeader>
+                    <div className="flex flex-col gap-2 max-h-80 overflow-y-auto mt-2 pr-2">
+                        {graphs.map(g => (
+                            <div key={g.id} className={cn("flex items-center justify-between p-2 rounded border cursor-pointer hover:bg-accent-hover transition-colors", activeGraphId === g.id ? "border-accent bg-accent/5" : "border-border bg-surface")}>
+                                <div className="flex-1 font-medium text-sm text-text-primary hover:underline" onClick={() => { setActiveGraphId(g.id); setCurrentLevelId(g.id); setSwapDialogOpen(false); }}>
+                                    {g.name}
+                                </div>
+                                <Button variant="ghost" size="icon-sm" className="h-6 w-6 text-error hover:text-error/80" onClick={(e) => { e.stopPropagation(); if (confirm(`Delete timeline "${g.name}"?`)) deleteTlMut.mutate(g.id); }}>
+                                    <Trash2 className="h-3 w-3" />
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="flex justify-end mt-4">
+                        <Button onClick={() => { setSwapDialogOpen(false); router.push('/settings?tab=timeline'); }} className='bg-accent'>
+                            <GitFork className="h-4 w-4 mr-2" /> Create New Timeline
+                        </Button>
                     </div>
                 </DialogContent>
             </Dialog>
-        </>
+
+            {/* Canvas Wizard Modal */}
+            {wizardEventId && activeGraph && (
+                <CanvasWizard
+                    eventId={wizardEventId}
+                    activeGraph={activeGraph}
+                    onClose={() => setWizardEventId(null)}
+                />
+            )}
+        </div>
     );
 }
 
-// -----------------------------------------------------------------------------------------
-// Recursive Tree Node
-// -----------------------------------------------------------------------------------------
-
-interface TreeNodeProps {
-    node: TLNode;
-    byParent: NodeIndex;
-    expanded: ExpandMap;
-    toggle: (id: string) => void;
-    editing: EditingMap;
-    startEdit: (id: string) => void;
-    stopEdit: (id: string) => void;
-    rename: (id: string, label: string) => void;
-    cfg: TimelineConfig;
-    eventsByNode: Map<string, PlacedEvent[]>;
-    onAddSubLevel: (n: TLNode, lvl: number) => void;
-    onInsertSibling: (n: TLNode, pos: 'before' | 'after') => void;
-    onAddEvent: (n: TLNode) => void;
-    onReorderNode: (n: TLNode, dir: 'up' | 'down') => void;
-    onDelete: (n: TLNode) => void;
-
-    onOpenEvent: (ev: PlacedEvent) => void;
-    onReorderEvent: (ev: PlacedEvent, dir: 'up' | 'down') => void;
-    onMoveEventToNode: (ev: PlacedEvent, nodeId: string) => void;
-    onUnplaceEvent: (ev: PlacedEvent) => void;
-    onDeleteEvent: (ev: PlacedEvent) => void;
-    nodes: TLNode[];
-    getSiblings: (nodeId: string) => { parentId: string | null; siblings: TLNode[]; idx: number };
-    isRoot?: boolean;
-}
-
-function TreeNode({
-    node,
-    byParent,
-    expanded,
-    toggle,
-    editing,
-    startEdit,
-    stopEdit,
-    rename,
-    cfg,
-    eventsByNode,
-    onAddSubLevel,
-    onInsertSibling,
-    onAddEvent,
-    onReorderNode,
-    onDelete,
-    onOpenEvent,
-    onReorderEvent,
-    onMoveEventToNode,
-    onUnplaceEvent,
-    onDeleteEvent,
-    nodes,
-    getSiblings,
-    isRoot = false,
-}: TreeNodeProps) {
-    const children = byParent.get(node.id) || [];
-    const isOpen = expanded[node.id] ?? true;
-    const [draft, setDraft] = React.useState(node.title ?? '');
-    const { setCurrentLevelId } = useTimelineStore();
-
-    React.useEffect(() => setDraft(node.title ?? ''), [node.title]);
+function ExplorerItem({
+    title, baseName, isExpanded, hasChildren, isEditing,
+    onToggle, onStartEdit, onSave, onCancel, menuItems, icon
+}: any) {
+    const [draft, setDraft] = React.useState(title || '');
+    React.useEffect(() => setDraft(title || ''), [title]);
 
     const handleSave = () => {
         const val = draft.trim();
-        if (val !== (node.title ?? '')) {
-            rename(node.id, val);
+        if (val !== (title || '')) {
+            onSave(val);
+        } else {
+            onCancel();
         }
-        stopEdit(node.id);
     };
 
-    const nextLevelOptions = nextLevels(node.level, cfg);
-    const events = eventsByNode.get(node.id) || [];
-
-    const { siblings, idx, parentId } = getSiblings(node.id);
-
-    // Sort logic handled by parent container usually, but let's trust getSiblings returns them in order.
-    // If we need to disable move buttons:
-    const canMoveUp = idx > 0;
-    const canMoveDown = idx < siblings.length - 1;
-
-    // Use name or formatted level name
-    const levelName = node.name || getLevelName(node.level, cfg);
-    const orderNum = getDerivedNumber(node, nodes, cfg);
-
-    // Condition: Single Timeline Level 1 -> No Number
-    const isSingleRoot = cfg.timelineType === 'single' && node.level === 1;
-    const baseName = isSingleRoot ? levelName : `${levelName} ${orderNum}`;
-
-    const displayName = node.title ? `${baseName} — ${node.title}` : baseName;
-    const hasChildren = children.length > 0;
-    const hasEvents = events.length > 0;
-
-    const dropdownClass = "bg-surface border-border border-accent z-[150]";
+    const displayName = title ? `${baseName} — ${title}` : baseName;
 
     return (
-        <div className={cn("relative", !isRoot && "ml-4 pl-2 border-l border-border/40")}>
-            {/* Node Row */}
-            <div className="group flex items-center py-1 gap-1 -ml-3">
-                <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    className={cn("h-6 w-6 text-text-muted hover:text-text-primary", (hasChildren || hasEvents) ? "opacity-100" : "opacity-0")}
-                    onClick={() => toggle(node.id)}
-                    disabled={!hasChildren && !hasEvents}
-                >
-                    {isOpen ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-                </Button>
+        <div className="group flex items-center py-1 gap-1 -ml-3">
+            <Button
+                variant="ghost"
+                size="icon-sm"
+                className={cn("h-6 w-6 text-text-muted hover:text-text-primary z-10", hasChildren ? "opacity-100" : "opacity-0")}
+                onClick={(e) => { e.stopPropagation(); onToggle(); }}
+                disabled={!hasChildren}
+            >
+                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+            </Button>
 
-                <div className="flex items-center gap-2 flex-1 min-w-0 group-hover:bg-accent-hover rounded px-2 py-1 transition-colors">
-                    <Folder className="h-4 w-4 text-text-muted" />
-
-                    {editing[node.id] ? (
-                        <Input
-                            value={draft}
-                            onChange={(e) => setDraft(e.target.value)}
-                            onBlur={handleSave}
-                            onKeyDown={(e) => {
-                                if (e.key === 'Enter') handleSave();
-                                if (e.key === 'Escape') stopEdit(node.id);
-                            }}
-                            className="h-7 py-1 px-2 text-sm w-full focus-within:ring-accent"
-                            autoFocus
-                        />
-                    ) : (
-                        <span
-                            className="text-sm font-medium text-text-primary cursor-default truncate select-none"
-                            onDoubleClick={() => startEdit(node.id)}
-                        >
-                            {displayName}
-                        </span>
-                    )}
-
-                    <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center">
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
+            {isEditing ? (
+                <div className="flex items-center gap-2 flex-1 min-w-0 bg-accent-hover rounded px-2 py-1 transition-colors">
+                    {icon || <Folder className="h-4 w-4 text-text-muted shrink-0" />}
+                    <Input
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        onBlur={handleSave}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleSave();
+                            if (e.key === 'Escape') onCancel();
+                        }}
+                        className="h-7 py-1 px-2 text-sm w-full focus-within:ring-accent"
+                        autoFocus
+                    />
+                </div>
+            ) : (
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <div className="cursor-pointer flex items-center gap-2 flex-1 min-w-0 group-hover:bg-accent-hover rounded px-2 py-1 transition-colors">
+                            {icon || <Folder className="h-4 w-4 text-text-muted shrink-0" />}
+                            <span
+                                className="text-sm font-medium text-text-primary truncate select-none flex-1"
+                                onDoubleClick={(e) => { e.stopPropagation(); onStartEdit(); }}
+                            >
+                                {displayName}
+                            </span>
+                            <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center shrink-0">
                                 <Button variant="ghost" size="icon-sm" className="h-6 w-6">
                                     <MoreHorizontal className="h-3 w-3" />
                                 </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start" className={dropdownClass}>
-                                <DropdownMenuItem onClick={() => startEdit(node.id)}>
-                                    <FolderPen className="h-3 w-3" />
-                                    Rename
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => setCurrentLevelId(node.id)}>
-                                    <SquareArrowOutUpRight className="h-3 w-3" />
-                                    Go To (Canvas)
-                                </DropdownMenuItem>
-
-                                {/* Add Sub Level */}
-                                {nextLevelOptions.length > 0 && node.level < 5 && (
-                                    <DropdownMenuItem onClick={() => onAddSubLevel(node, nextLevelOptions[0]!)}>
-                                        <FolderPlus className="h-3 w-3" />
-                                        Add Sub-Level
-                                    </DropdownMenuItem>
-                                )}
-
-                                {/* Insert Above/Below - Unavailable for Level 1 */}
-                                {!isRoot && (
-                                    <>
-                                        <DropdownMenuItem onClick={() => onInsertSibling(node, 'before')}>
-                                            <FolderUp className="h-3 w-3" />
-                                            Insert Level Above
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => onInsertSibling(node, 'after')}>
-                                            <FolderDown className="h-3 w-3" />
-                                            Insert Level Below
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-
-                                {/* Add Event */}
-                                <DropdownMenuItem onClick={() => onAddEvent(node)}>
-                                    <CirclePlus className="h-3 w-3" />
-                                    Add Event
-                                </DropdownMenuItem>
-
-                                <DropdownMenuSeparator />
-
-                                {/* Move Up/Down - Unavailable for Level 1 */}
-                                {!isRoot && (
-                                    <>
-                                        <DropdownMenuItem disabled={!canMoveUp} onClick={() => onReorderNode(node, 'up')}>
-                                            <ArrowUp className="w-3 h-3 mr-2" /> Move Up
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem disabled={!canMoveDown} onClick={() => onReorderNode(node, 'down')}>
-                                            <ArrowDown className="w-3 h-3 mr-2" /> Move Down
-                                        </DropdownMenuItem>
-                                        <DropdownMenuSeparator />
-                                        <DropdownMenuItem
-                                            onClick={() => onDelete(node)}
-                                            className="text-error focus:text-error"
-                                        >
-                                            <Trash2 className="w-3 h-3 mr-2" />
-                                            Delete
-                                        </DropdownMenuItem>
-                                    </>
-                                )}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </div>
-                </div>
-            </div>
-
-            {/* Children & Events */}
-            {isOpen && (
-                <div className="animate-accordion-down">
-                    {/* Events */}
-                    {events.map((ev, i) => (
-                        <div key={ev.id} className="ml-4 pl-4 hover:bg-accent-hover rounded border-l border-border/40 p-1 flex items-center gap-2 group/event">
-                            {/* Color Dot */}
-                            <div className={cn(
-                                "w-2.5 h-2.5 rounded-full border",
-                                INTENSITY_COLORS[ev.intensity] ? INTENSITY_COLORS[ev.intensity]!.replace('/10', '') : "bg-gray-400 border-gray-500"
-                            )} />
-
-                            <button
-                                className="text-sm transition-colors truncate text-left flex-1"
-                                onClick={() => onOpenEvent(ev)}
-                            >
-                                {ev.title}
-                            </button>
-
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="icon-sm" className="h-5 w-5 opacity-0 group-hover/event:opacity-100 transition-opacity ml-auto">
-                                        <MoreHorizontal className="h-3 w-3" />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className={dropdownClass}>
-                                    <DropdownMenuItem onClick={() => onOpenEvent(ev)}>
-                                        <SquareArrowOutUpRight className="h-3 w-3" /> Open Details
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem disabled={i === 0} onClick={() => onReorderEvent(ev, 'up')}>
-                                        <ArrowUp className="w-3 h-3 mr-2" /> Move Up
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem disabled={i === events.length - 1} onClick={() => onReorderEvent(ev, 'down')}>
-                                        <ArrowDown className="w-3 h-3 mr-2" /> Move Down
-                                    </DropdownMenuItem>
-
-                                    <DropdownMenuSub>
-                                        <DropdownMenuSubTrigger>
-                                            <Redo2 className="h-3 w-3" /> Move To...
-                                        </DropdownMenuSubTrigger>
-                                        <DropdownMenuSubContent className={dropdownClass}>
-
-                                            {/* Previous Sibling Level */}
-                                            {idx > 0 && (
-                                                <DropdownMenuItem onClick={() => onMoveEventToNode(ev, siblings[idx - 1]!.id)}>
-                                                    <ArrowUp className="h-3 w-3 mr-2" /> Previous Level
-                                                </DropdownMenuItem>
-                                            )}
-
-                                            {/* Next Sibling Level */}
-                                            {idx < siblings.length - 1 && (
-                                                <DropdownMenuItem onClick={() => onMoveEventToNode(ev, siblings[idx + 1]!.id)}>
-                                                    <ArrowDown className="h-3 w-3 mr-2" /> Next Level
-                                                </DropdownMenuItem>
-                                            )}
-
-                                            {(idx > 0 || idx < siblings.length - 1) && <DropdownMenuSeparator />}
-
-                                            {/* Move Higher (to parent) */}
-                                            {parentId && !isRoot && (
-                                                <DropdownMenuItem onClick={() => onMoveEventToNode(ev, parentId)}>
-                                                    <ChevronsUp className="h-3 w-3" /> Higher (Parent Level)
-                                                </DropdownMenuItem>
-                                            )}
-
-                                            {/* Move Lower (to children) */}
-                                            {children.length > 0 && node.level < 5 && (
-                                                <DropdownMenuSub>
-                                                    <DropdownMenuSubTrigger>
-                                                        <ChevronsDown className="h-3 w-3" /> Move Lower
-                                                    </DropdownMenuSubTrigger>
-                                                    <DropdownMenuSubContent className={dropdownClass}>
-                                                        {children.map(child => (
-                                                            <DropdownMenuItem key={child.id} onClick={() => onMoveEventToNode(ev, child.id)}>
-                                                                {child.title || getLevelName(child.level, cfg)}
-                                                            </DropdownMenuItem>
-                                                        ))}
-                                                    </DropdownMenuSubContent>
-                                                </DropdownMenuSub>
-                                            )}
-
-                                            <DropdownMenuSeparator />
-                                            <DropdownMenuItem
-                                                onClick={() => onUnplaceEvent(ev)}
-                                                disabled={isRoot && node.level === 1}
-                                            >
-                                                <CornerUpLeft className="w-3 h-3 mr-2" />
-                                                Unplace (Root)
-                                            </DropdownMenuItem>
-                                        </DropdownMenuSubContent>
-                                    </DropdownMenuSub>
-
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => onDeleteEvent(ev)} className="text-error">
-                                        <Trash2 className="w-3 h-3 mr-2" /> Delete
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
+                            </div>
                         </div>
-                    ))}
-
-                    {/* Nested Levels */}
-                    {children.map(child => (
-                        <TreeNode
-                            key={child.id}
-                            node={child}
-                            byParent={byParent}
-                            expanded={expanded}
-                            toggle={toggle}
-                            editing={editing}
-                            startEdit={startEdit}
-                            stopEdit={stopEdit}
-                            rename={rename}
-                            cfg={cfg}
-                            eventsByNode={eventsByNode}
-                            onAddSubLevel={onAddSubLevel}
-                            onInsertSibling={onInsertSibling}
-                            onAddEvent={onAddEvent}
-                            onReorderNode={onReorderNode}
-                            onDelete={onDelete}
-                            onOpenEvent={onOpenEvent}
-                            onReorderEvent={onReorderEvent}
-                            onMoveEventToNode={onMoveEventToNode}
-                            onUnplaceEvent={onUnplaceEvent}
-                            onDeleteEvent={onDeleteEvent}
-                            nodes={nodes}
-                            getSiblings={getSiblings}
-                        />
-                    ))}
-                </div>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="bg-surface border-border border-accent z-[150]">
+                        {menuItems}
+                    </DropdownMenuContent>
+                </DropdownMenu>
             )}
+        </div>
+    );
+}
+
+function ExplorerEventItem({
+    title, inDock, onClick, onViewCanvas, onViewDock, onManageConnection, onDuplicate, onRemove
+}: any) {
+    return (
+        <div className="group flex items-center py-1 gap-1 -ml-3">
+            <div className="w-6 shrink-0 flex items-center justify-center">
+                {inDock ? <Circle className="h-3.5 w-3.5 text-text-muted/60" /> : <GitCommitHorizontal className="h-3.5 w-3.5 text-accent" />}
+            </div>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <div
+                        className="cursor-pointer flex items-center gap-2 flex-1 min-w-0 group-hover:bg-accent-hover rounded px-2 py-1 transition-colors"
+                        onClick={(e) => { e.stopPropagation(); onClick(); }}
+                    >
+                        <span className="text-xs font-medium text-text-secondary group-hover:text-text-primary truncate select-none flex-1">
+                            {title}
+                        </span>
+                        <div className="ml-auto opacity-0 group-hover:opacity-100 transition-opacity flex items-center shrink-0">
+                            <Button variant="ghost" size="icon-sm" className="h-6 w-6">
+                                <MoreHorizontal className="h-3 w-3" />
+                            </Button>
+                        </div>
+                    </div>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-surface border-border border-accent z-[150]">
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewCanvas(); }}>
+                        <GitCommitHorizontal className="h-4 w-4 mr-2" /> View in Canvas
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onViewDock(); }}>
+                        <ExternalLink className="h-4 w-4 mr-2" /> View in Dock
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onManageConnection(); }}>
+                        <Settings className="h-4 w-4 mr-2" /> Manage Connection
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={(e) => { e.stopPropagation(); onDuplicate(); }}>
+                        <Copy className="h-4 w-4 mr-2" /> Duplicate
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-error" onClick={(e) => { e.stopPropagation(); onRemove(); }}>
+                        <Trash2 className="h-4 w-4 mr-2 text-error" /> Remove
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     );
 }
